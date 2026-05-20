@@ -3,7 +3,6 @@ package wev.smt;
 import com.weakest.model.Event;
 import com.weakest.model.EventStructure;
 import com.weakest.model.EventType;
-import com.weakest.model.MemoryOrder;
 import com.weakest.model.ReadEvent;
 import com.weakest.model.WriteEvent;
 import org.sosy_lab.java_smt.api.BooleanFormula;
@@ -18,17 +17,14 @@ import org.sosy_lab.java_smt.api.SolverContext;
 import org.sosy_lab.java_smt.api.SolverContext.ProverOptions;
 import org.sosy_lab.java_smt.api.SolverException;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 /**
  * Finds minimum-cardinality consistent (and separating) executions of an
@@ -54,7 +50,6 @@ public final class MinimalWitnessExtractor {
     private final BooleanFormulaManager bmgr;
     private final IntegerFormulaManager imgr;
     private final Map<Event, BooleanFormula> activeVars = new LinkedHashMap<>();
-    private final AtomicInteger layerTag = new AtomicInteger();
 
     public MinimalWitnessExtractor(SolverContext ctx, EventStructureEncoder enc,
                                    AxiomaticConsistency axioms) {
@@ -243,13 +238,17 @@ public final class MinimalWitnessExtractor {
                         bmgr.not(imgr.equal(enc.getPosVar(a), enc.getPosVar(b)))));
             }
         }
-        // po edges between active events.
+        // po edges between active events, with cross-location W→W / W→R dropped to
+        // mirror EventStructureEncoder.relaxedPoConstraints (Pass 2b-min). The two
+        // well-formedness encoders must relax identically or the validation atlas and
+        // the sub-execution search would disagree about what is well-formed.
         for (Map.Entry<Integer, List<Integer>> entry : es.getProgramOrder().entrySet()) {
             Event a = es.getEventById(entry.getKey());
             if (a == null) continue;
             for (Integer toId : entry.getValue()) {
                 Event b = es.getEventById(toId);
                 if (b == null) continue;
+                if (droppedCrossLocation(a, b)) continue;
                 cs.add(bmgr.implication(bothActive(a, b),
                         imgr.lessThan(enc.getPosVar(a), enc.getPosVar(b))));
             }
@@ -304,122 +303,23 @@ public final class MinimalWitnessExtractor {
 
     // ── Gated consistency ─────────────────────────────────────────────────
 
+    /**
+     * The model's consistency axioms, gated by this extractor's {@code active_e}
+     * variables. Delegates to {@link AxiomaticConsistency} so the sub-execution
+     * search and the full-execution validation atlas share one definition of every
+     * model — including {@link AxiomaticConsistency#coherencePerLocation}. The gate
+     * {@code activeVars::get} maps each event to its activation literal; an axiom edge
+     * is only enforced when its endpoints are all active.
+     */
     private BooleanFormula gatedConsistency(MemoryModel m) {
-        Map<Event, IntegerFormula> layer = freshLayer(m);
-        List<BooleanFormula> cs = new ArrayList<>();
-        switch (m) {
-            case SC -> {
-                addGatedPo(cs, layer, false, false);
-                addGatedRf(cs, layer, false, false);
-                addGatedCo(cs, layer);
-                addGatedFr(cs, layer);
-            }
-            case TSO -> {
-                addGatedPo(cs, layer, true, false);
-                addGatedRf(cs, layer, true, false);
-                addGatedCo(cs, layer);
-                addGatedFr(cs, layer);
-            }
-            case PSO -> {
-                addGatedPo(cs, layer, true, true);
-                addGatedRf(cs, layer, true, false);
-                addGatedCo(cs, layer);
-                addGatedFr(cs, layer);
-            }
-            case RA -> {
-                addGatedPo(cs, layer, false, false);
-                addGatedRf(cs, layer, false, true);
-                addGatedCo(cs, layer);
-                addGatedFr(cs, layer);
-            }
-            case WEAKEST -> {
-                addGatedPo(cs, layer, false, false);
-                addGatedRf(cs, layer, false, false);
-                addGatedWeakestCoherence(cs, layer);
-            }
-        }
-        return cs.isEmpty() ? bmgr.makeTrue() : bmgr.and(cs);
-    }
-
-    private void addGatedPo(List<BooleanFormula> cs, Map<Event, IntegerFormula> layer,
-                            boolean skipWR, boolean skipWW) {
-        for (Map.Entry<Integer, List<Integer>> entry : es.getProgramOrder().entrySet()) {
-            Event a = es.getEventById(entry.getKey());
-            if (a == null) continue;
-            for (Integer toId : entry.getValue()) {
-                Event b = es.getEventById(toId);
-                if (b == null) continue;
-                if (skipWR && isWriteOrInit(a) && b instanceof ReadEvent) continue;
-                if (skipWW && isWriteOrInit(a) && isWriteOrInit(b)) continue;
-                cs.add(bmgr.implication(bothActive(a, b),
-                        imgr.lessThan(layer.get(a), layer.get(b))));
-            }
-        }
-    }
-
-    private void addGatedRf(List<BooleanFormula> cs, Map<Event, IntegerFormula> layer,
-                            boolean externalOnly, boolean releaseAcquireOnly) {
-        for (Map.Entry<EventPair, BooleanFormula> e : enc.getRfVars().entrySet()) {
-            Event w = e.getKey().from();
-            Event r = e.getKey().to();
-            if (externalOnly && w.getThreadId() == r.getThreadId()) continue;
-            if (releaseAcquireOnly && !(isReleaseLike(w) && isAcquireLike(r))) continue;
-            cs.add(bmgr.implication(
-                    bmgr.and(e.getValue(), bothActive(w, r)),
-                    imgr.lessThan(layer.get(w), layer.get(r))));
-        }
-    }
-
-    private void addGatedCo(List<BooleanFormula> cs, Map<Event, IntegerFormula> layer) {
-        for (Map.Entry<EventPair, BooleanFormula> e : enc.getCoVars().entrySet()) {
-            Event a = e.getKey().from();
-            Event b = e.getKey().to();
-            cs.add(bmgr.implication(
-                    bmgr.and(e.getValue(), bothActive(a, b)),
-                    imgr.lessThan(layer.get(a), layer.get(b))));
-        }
-    }
-
-    private void addGatedFr(List<BooleanFormula> cs, Map<Event, IntegerFormula> layer) {
-        for (Map.Entry<EventPair, BooleanFormula> rf : enc.getRfVars().entrySet()) {
-            Event w = rf.getKey().from();
-            Event r = rf.getKey().to();
-            for (Map.Entry<EventPair, BooleanFormula> co : enc.getCoVars().entrySet()) {
-                if (co.getKey().from().getId() != w.getId()) continue;
-                Event wp = co.getKey().to();
-                BooleanFormula gate = bmgr.and(List.of(
-                        rf.getValue(),
-                        co.getValue(),
-                        activeVars.get(w),
-                        activeVars.get(r),
-                        activeVars.get(wp)));
-                cs.add(bmgr.implication(gate,
-                        imgr.lessThan(layer.get(r), layer.get(wp))));
-            }
-        }
-    }
-
-    private void addGatedWeakestCoherence(List<BooleanFormula> cs,
-                                          Map<Event, IntegerFormula> layer) {
-        for (Event re : es.getEvents()) {
-            if (!(re instanceof ReadEvent r)) continue;
-            if (r.getMemoryOrder() == MemoryOrder.RELAXED) continue;
-            for (Event w : writesToVar(r.getVariable())) {
-                BooleanFormula rfVar = enc.getRfVars().get(new EventPair(w, r));
-                if (rfVar == null) continue;
-                for (Event wp : writesToVar(r.getVariable())) {
-                    if (wp.getId() == w.getId()) continue;
-                    if (!poReaches(wp.getId(), r.getId())) continue;
-                    BooleanFormula gate = bmgr.and(List.of(
-                            rfVar,
-                            activeVars.get(w),
-                            activeVars.get(r),
-                            activeVars.get(wp)));
-                    cs.add(bmgr.implication(gate,
-                            imgr.greaterOrEquals(layer.get(w), layer.get(wp))));
-                }
-            }
-        }
+        Function<Event, BooleanFormula> active = activeVars::get;
+        return switch (m) {
+            case SC -> axioms.consistencySC(active);
+            case TSO -> axioms.consistencyTSO(active);
+            case PSO -> axioms.consistencyPSO(active);
+            case RA -> axioms.consistencyRA(active);
+            case WEAKEST -> axioms.consistencyWEAKEST(active);
+        };
     }
 
     // ── Static utilities ──────────────────────────────────────────────────
@@ -428,28 +328,13 @@ public final class MinimalWitnessExtractor {
         return bmgr.and(activeVars.get(a), activeVars.get(b));
     }
 
-    private Map<Event, IntegerFormula> freshLayer(MemoryModel m) {
-        int id = layerTag.incrementAndGet();
-        Map<Event, IntegerFormula> out = new LinkedHashMap<>();
-        for (Event e : es.getEvents()) {
-            out.put(e, imgr.makeVariable(
-                    "mwlayer_" + m.name().toLowerCase() + id + "_e" + e.getId()));
-        }
-        return out;
-    }
-
-    private boolean isWriteOrInit(Event e) {
-        return e instanceof WriteEvent || e.getType() == EventType.INIT;
-    }
-
-    private boolean isReleaseLike(Event e) {
-        MemoryOrder mo = e.getMemoryOrder();
-        return mo == MemoryOrder.RELEASE || mo == MemoryOrder.SC;
-    }
-
-    private boolean isAcquireLike(Event e) {
-        MemoryOrder mo = e.getMemoryOrder();
-        return mo == MemoryOrder.ACQUIRE || mo == MemoryOrder.SC;
+    /** Whether {@code a→b} is a cross-location store→store or store→load po edge. */
+    private boolean droppedCrossLocation(Event a, Event b) {
+        boolean aWrite = a instanceof WriteEvent || a.getType() == EventType.INIT;
+        boolean bAccess = b instanceof WriteEvent || b instanceof ReadEvent
+                || b.getType() == EventType.INIT;
+        if (!(aWrite && bAccess)) return false;
+        return a.getVariable() != null && !a.getVariable().equals(b.getVariable());
     }
 
     private List<Event> writesToVar(String var) {
@@ -461,21 +346,5 @@ public final class MinimalWitnessExtractor {
             }
         }
         return out;
-    }
-
-    private boolean poReaches(int fromId, int toId) {
-        Map<Integer, List<Integer>> po = es.getProgramOrder();
-        Set<Integer> visited = new HashSet<>();
-        Deque<Integer> queue = new ArrayDeque<>();
-        queue.add(fromId);
-        while (!queue.isEmpty()) {
-            int cur = queue.poll();
-            if (!visited.add(cur)) continue;
-            for (Integer nxt : po.getOrDefault(cur, List.of())) {
-                if (nxt == toId) return true;
-                queue.add(nxt);
-            }
-        }
-        return false;
     }
 }

@@ -123,7 +123,7 @@ public final class EventStructureEncoder {
             }
         }
 
-        cs.addAll(poConstraints());
+        cs.addAll(relaxedPoConstraints());
 
         for (Event e : es.getEvents()) {
             if (!(e instanceof ReadEvent r)) continue;
@@ -203,6 +203,45 @@ public final class EventStructureEncoder {
             }
         }
         return cs;
+    }
+
+    /**
+     * Program-order constraints for the global execution order (Pass 2b-min), with
+     * <em>cross-location</em> store→store and store→load pairs dropped. Those pairs are
+     * not in preserved program order under PSO/RA/WEAKEST (Alglave et al., Herding Cats,
+     * TOPLAS 2014, §4.4: PSO relaxes W→W; TSO relaxes W→R), so forcing them into the
+     * single global {@code pos} order made well-formedness an SC-strength backstop that
+     * over-forbade S and 2+2W. Kept: all R→W / R→R pairs, and <em>same-location</em>
+     * W→W / W→R pairs. Same-location ordering is independently re-imposed by
+     * {@link AxiomaticConsistency#coherencePerLocation} (SC-per-location), and SC/TSO
+     * re-impose the cross-location W→W they need via their own consistency layers, so
+     * dropping these edges here does not weaken any model below its textbook strength.
+     * Unlike {@link #poConstraints()}, this is used only by well-formedness, never by
+     * relation extraction.
+     */
+    private List<BooleanFormula> relaxedPoConstraints() {
+        List<BooleanFormula> cs = new ArrayList<>();
+        for (Map.Entry<Integer, List<Integer>> entry : es.getProgramOrder().entrySet()) {
+            Event a = es.getEventById(entry.getKey());
+            if (a == null) continue;
+            IntegerFormula posA = eventVars.get(a);
+            for (Integer toId : entry.getValue()) {
+                Event b = es.getEventById(toId);
+                if (b == null) continue;
+                if (droppedCrossLocation(a, b)) continue;
+                cs.add(imgr.lessThan(posA, eventVars.get(b)));
+            }
+        }
+        return cs;
+    }
+
+    /** Whether {@code a→b} is a cross-location store→store or store→load po edge. */
+    private boolean droppedCrossLocation(Event a, Event b) {
+        boolean aWrite = a instanceof WriteEvent || a.getType() == EventType.INIT;
+        boolean bAccess = b instanceof WriteEvent || b instanceof ReadEvent
+                || b.getType() == EventType.INIT;
+        if (!(aWrite && bAccess)) return false;
+        return a.getVariable() != null && !a.getVariable().equals(b.getVariable());
     }
 
     private List<BooleanFormula> coConstraints() {

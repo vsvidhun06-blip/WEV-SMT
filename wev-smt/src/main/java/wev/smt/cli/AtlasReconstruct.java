@@ -49,8 +49,10 @@ import java.util.Optional;
  * first CLI argument), and prints a validation summary plus the atlas matrix.
  *
  * <p>The whole run is bounded by {@link #BUDGET_MS}. Validation always completes;
- * separation work is ordered most-informative-first and abandoned (recorded as
- * {@code skipped}) once the budget is spent, so the tool never exceeds it.
+ * separation work is ordered most-informative-first and, once the deadline passes,
+ * remaining searches are recorded as {@link SepStatus#TIMEOUT} rather than started,
+ * so the tool never exceeds its budget. A per-call cap ({@link #PER_CALL_BUDGET_MS})
+ * also yields {@code TIMEOUT}; an exhausted search yields {@link SepStatus#NO_SEPARATION}.
  *
  * <p>Note on sizes: {@link MinimalWitnessExtractor#findMinimalConsistent} returns the
  * smallest <em>consistent</em> sub-execution, which under the gated encoding is the
@@ -60,11 +62,11 @@ import java.util.Optional;
  */
 public final class AtlasReconstruct {
 
-    private static final long BUDGET_MS = 5 * 60 * 1000L;
+    private static final long BUDGET_MS = 10 * 60 * 1000L;
     /** Wall-clock point after which no new separation searches are started. */
-    private static final long SEPARATION_DEADLINE_MS = 260 * 1000L;
-    /** Per-pair refinement budget; a single no-separation pair cannot exceed this. */
-    private static final long PER_CALL_BUDGET_MS = 3000L;
+    private static final long SEPARATION_DEADLINE_MS = 480 * 1000L;
+    /** Per-pair refinement budget; a single pair-case search cannot exceed this. */
+    private static final long PER_CALL_BUDGET_MS = 30_000L;
 
     private static final MemoryModel[] MODELS = MemoryModel.values();
 
@@ -73,14 +75,26 @@ public final class AtlasReconstruct {
     private static final String DIM = "[2m";
     private static final String RESET = "[0m";
 
+    /** Distinct from RED/GREEN: marks budget-limited (unknown) separation cells. */
+    private static final String YELLOW = "[33m";
+
     private AtlasReconstruct() { }
+
+    /**
+     * Outcome of a single separation search. {@code SOLVED} found a witness;
+     * {@code NO_SEPARATION} exhausted the CEGAR search (no witness exists within the
+     * encoding); {@code TIMEOUT} ran out of budget — either the per-call cap fired
+     * mid-search or the overall deadline passed before the search started — so the
+     * answer is genuinely unknown, NOT a proven {@code NO_SEPARATION}.
+     */
+    private enum SepStatus { SOLVED, NO_SEPARATION, TIMEOUT }
 
     private record ValidationRow(String litmus, MemoryModel model, Outcome expected,
                                  Outcome actual, boolean compared, boolean match,
                                  int size, long ms) { }
 
     private record SeparationRow(String litmus, MemoryModel allow, MemoryModel forbid,
-                                 String status, Integer size, long ms) { }
+                                 SepStatus status, Integer size, long ms) { }
 
     /** Per-case SMT scaffolding, built once over the shared context. */
     private record Encoded(LitmusCase lc, EventStructureEncoder enc,
@@ -183,7 +197,7 @@ public final class AtlasReconstruct {
             if (budgetSpent || elapsed > SEPARATION_DEADLINE_MS) {
                 budgetSpent = true;
                 rows.add(new SeparationRow(j.e().lc().name(), j.allow(), j.forbid(),
-                        "skipped", null, 0));
+                        SepStatus.TIMEOUT, null, 0));
                 continue;
             }
             long t0 = System.currentTimeMillis();
@@ -192,13 +206,15 @@ public final class AtlasReconstruct {
             long ms = System.currentTimeMillis() - t0;
             if (w.isPresent()) {
                 rows.add(new SeparationRow(j.e().lc().name(), j.allow(), j.forbid(),
-                        "separated", w.get().cardinality(), ms));
+                        SepStatus.SOLVED, w.get().cardinality(), ms));
             } else {
-                // Distinguish an exhausted search ("none") from one cut off by the
-                // per-call budget ("capped"): the latter ran (almost) the full budget.
-                String status = ms >= (PER_CALL_BUDGET_MS * 9) / 10 ? "capped" : "none";
+                // An empty result is either an exhausted search (NO_SEPARATION — no
+                // witness exists in the encoding) or a per-call budget cut-off
+                // (TIMEOUT — unknown); the latter ran ~the full per-call budget.
+                SepStatus st = ms >= (PER_CALL_BUDGET_MS * 9) / 10
+                        ? SepStatus.TIMEOUT : SepStatus.NO_SEPARATION;
                 rows.add(new SeparationRow(j.e().lc().name(), j.allow(), j.forbid(),
-                        status, null, ms));
+                        st, null, ms));
             }
         }
         return rows;
@@ -298,23 +314,22 @@ public final class AtlasReconstruct {
             for (MemoryModel forbid : MODELS) {
                 if (allow == forbid) continue;
                 List<SeparationRow> hits = new ArrayList<>();
-                int none = 0, capped = 0, skipped = 0;
+                int noSep = 0, timeout = 0;
                 for (SeparationRow r : rows) {
                     if (r.allow() == allow && r.forbid() == forbid) {
                         switch (r.status()) {
-                            case "separated" -> hits.add(r);
-                            case "none" -> none++;
-                            case "capped" -> capped++;
-                            case "skipped" -> skipped++;
-                            default -> { }
+                            case SOLVED -> hits.add(r);
+                            case NO_SEPARATION -> noSep++;
+                            case TIMEOUT -> timeout++;
                         }
                     }
                 }
                 StringBuilder tail = new StringBuilder();
                 List<String> notes = new ArrayList<>();
-                if (none > 0) notes.add(none + " none");
-                if (capped > 0) notes.add(capped + " capped");
-                if (skipped > 0) notes.add(skipped + " skipped");
+                if (noSep > 0) notes.add(noSep + " no-sep");
+                // T/O in yellow so budget-limited (unknown) cells stand out from
+                // proven no-separation cells.
+                if (timeout > 0) notes.add(YELLOW + timeout + " T/O" + RESET + DIM);
                 if (!notes.isEmpty()) {
                     tail.append(DIM).append("  [")
                         .append(String.join(", ", notes)).append("]").append(RESET);
