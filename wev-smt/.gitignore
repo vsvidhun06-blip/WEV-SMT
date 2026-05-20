@@ -1,0 +1,6 @@
+target/
+*.csv
+mismatches.txt
+*.iml
+.idea/
+logs/
