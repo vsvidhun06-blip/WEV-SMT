@@ -49,9 +49,13 @@ public final class LitmusCorpus {
     /** Whether a memory model permits a litmus test's forbidden-under-SC outcome. */
     public enum Outcome { ALLOWED, FORBIDDEN, UNKNOWN }
 
-    /** A named litmus test with its event structure and per-model expected outcome. */
+    /**
+     * A named litmus test with its event structure, per-model expected outcome, and
+     * (Pass 3) syntactic {@link DependencyInfo} sidecar. Dependency-free cases carry
+     * {@link DependencyInfo#empty()}.
+     */
     public record LitmusCase(String name, EventStructure es,
-                             Map<MemoryModel, Outcome> expected) { }
+                             Map<MemoryModel, Outcome> expected, DependencyInfo deps) { }
 
     // Shorthand for building the expected maps below.
     private static final Outcome A = Outcome.ALLOWED;
@@ -109,6 +113,21 @@ public final class LitmusCorpus {
         cs.add(c("MP-relacq", buildMP(REL, ACQ), exp(F, F, F, F, U)));
         cs.add(c("LB-acqrel", buildLB(REL, ACQ), exp(F, F, F, U, A)));
 
+        // ── Pass 3 (Stage 1): dependency-carrying LB variants ─────────────────
+        // These three carry syntactic addr/data dependency edges in a DependencyInfo
+        // sidecar; no consistency axiom reads them yet, so every cell is UNKNOWN (not
+        // compared) and they add no mismatch. They are the litmus the Stage-2
+        // jf-coherence axiom must separate: LBdep-fake should end up ALLOWED (the dep
+        // is the identity, no real causality), LBdep-real/LBdep-addr FORBIDDEN (a true
+        // causal cycle). Named distinctly from the existing no-dep OOTA twins
+        // (LB-fake-dep, OOTA-cycle) to avoid colliding with their wired verdicts.
+        EsDeps lbFake = buildLBFakeDep();
+        cs.add(c("LBdep-fake", lbFake.es(), exp(U, U, U, U, U), lbFake.deps()));
+        EsDeps lbReal = buildLBRealDep();
+        cs.add(c("LBdep-real", lbReal.es(), exp(U, U, U, U, U), lbReal.deps()));
+        EsDeps lbAddr = buildLBAddrDep();
+        cs.add(c("LBdep-addr", lbAddr.es(), exp(U, U, U, U, U), lbAddr.deps()));
+
         return cs;
     }
 
@@ -125,8 +144,16 @@ public final class LitmusCorpus {
 
     private static LitmusCase c(String name, EventStructure es,
                                 Map<MemoryModel, Outcome> expected) {
-        return new LitmusCase(name, es, expected);
+        return new LitmusCase(name, es, expected, DependencyInfo.empty());
     }
+
+    private static LitmusCase c(String name, EventStructure es,
+                                Map<MemoryModel, Outcome> expected, DependencyInfo deps) {
+        return new LitmusCase(name, es, expected, deps);
+    }
+
+    /** An event structure paired with its Pass-3 syntactic dependency sidecar. */
+    private record EsDeps(EventStructure es, DependencyInfo deps) { }
 
     private static Map<MemoryModel, Outcome> exp(Outcome sc, Outcome tso,
                                                  Outcome pso, Outcome ra,
@@ -460,6 +487,90 @@ public final class LitmusCorpus {
         es.addReadsFrom(rz, iz);
         es.addReadsFrom(rx, ix);
         return es;
+    }
+
+    // ── Pass 3 dependency-carrying builders ──────────────────────────────────
+
+    /**
+     * The shared LB skeleton for the dependency variants: T1 reads x then writes y,
+     * T2 reads y then writes x, with each read seeing the other thread's "future"
+     * write (the load-buffering cycle). Identical shape to {@link #buildLB}, but it
+     * hands back the individual events so the caller can attach dependency edges.
+     */
+    private static EsDeps lbSkeleton() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = w(0, "x", RLX, 0);
+        WriteEvent iy = w(0, "y", RLX, 0);
+        ReadEvent  r1 = r(1, "x", RLX, "r1");
+        WriteEvent wy = w(1, "y", RLX, 1);
+        ReadEvent  r2 = r(2, "y", RLX, "r2");
+        WriteEvent wx = w(2, "x", RLX, 1);
+        add(es, ix, iy, r1, wy, r2, wx);
+        es.addProgramOrder(r1, wy);
+        es.addProgramOrder(r2, wx);
+        co(es, "x", ix, wx);
+        co(es, "y", iy, wy);
+        es.addReadsFrom(r1, wx);
+        es.addReadsFrom(r2, wy);
+        // The dependency-free skeleton; callers populate deps and keep handles via the
+        // returned event structure (events are looked up below by program-order shape).
+        return new EsDeps(es, DependencyInfo.empty());
+    }
+
+    /**
+     * LB with a <em>fake</em> data dependency, e.g. {@code x = r ^ r + 1}: the value
+     * written syntactically mentions the read but is in fact constant, so there is no
+     * real causal cycle and WEAKEST should ALLOW it. Stage 1 records the same data-dep
+     * edges as the real case below — telling them apart needs Stage-2 value reasoning.
+     */
+    private static EsDeps buildLBFakeDep() {
+        return lbWithDeps(DependencyInfo::addDataDep);
+    }
+
+    /**
+     * LB with a <em>real</em> data dependency, e.g. {@code x = r + 1}: the written
+     * value genuinely varies with the read, closing a true causal cycle that WEAKEST
+     * should FORBID (out-of-thin-air).
+     */
+    private static EsDeps buildLBRealDep() {
+        return lbWithDeps(DependencyInfo::addDataDep);
+    }
+
+    /**
+     * LB where the read feeds the <em>address</em> of the subsequent write rather than
+     * its value — a real {@code addr} dependency, likewise a true causal cycle.
+     */
+    private static EsDeps buildLBAddrDep() {
+        return lbWithDeps(DependencyInfo::addAddrDep);
+    }
+
+    /**
+     * Build the LB skeleton and wire each thread's write to depend on its own prior
+     * read, using the supplied edge kind ({@code addDataDep} / {@code addAddrDep}).
+     * Convention is consumer→producer: the write (consumer) depends on the read
+     * (producer) whose value flows into it.
+     */
+    private static EsDeps lbWithDeps(DepEdge edge) {
+        EsDeps skel = lbSkeleton();
+        EventStructure es = skel.es();
+        // Recover the events by their role in the skeleton's program order: each
+        // thread is r(read) →po w(write).
+        DependencyInfo deps = new DependencyInfo();
+        for (Map.Entry<Integer, List<Integer>> po : es.getProgramOrder().entrySet()) {
+            Event from = es.getEventById(po.getKey());
+            if (!(from instanceof ReadEvent)) continue;
+            for (Integer toId : po.getValue()) {
+                Event to = es.getEventById(toId);
+                if (to instanceof WriteEvent w) edge.add(deps, w, from); // dep(write, read)
+            }
+        }
+        return new EsDeps(es, deps);
+    }
+
+    /** A method reference to one of {@link DependencyInfo}'s {@code add*Dep} adders. */
+    @FunctionalInterface
+    private interface DepEdge {
+        void add(DependencyInfo deps, Event consumer, Event producer);
     }
 
     // ── Small varargs helpers ──────────────────────────────────────────────

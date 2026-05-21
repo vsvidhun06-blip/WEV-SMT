@@ -118,7 +118,8 @@ public final class AtlasReconstruct {
 
             List<Encoded> encoded = new ArrayList<>();
             for (LitmusCase lc : cases) {
-                EventStructureEncoder enc = new EventStructureEncoder(ctx, lc.es());
+                EventStructureEncoder enc =
+                        new EventStructureEncoder(ctx, lc.es(), lc.deps());
                 AxiomaticConsistency ax = new AxiomaticConsistency(enc);
                 MinimalWitnessExtractor mw = new MinimalWitnessExtractor(ctx, enc, ax);
                 encoded.add(new Encoded(lc, enc, ax, mw, enc.encodeWellFormedness()));
