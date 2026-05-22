@@ -18,6 +18,10 @@
         <z3.version>4.13.0</z3.version>
         <junit.version>5.11.3</junit.version>
         <native.dir>${project.build.directory}/native</native.dir>
+        <!-- ScalabilitySweep run parameters (spec defaults; override with
+             -Dsweep.budget=<min> -Dsweep.percall=<sec> for a constrained window). -->
+        <sweep.budget>30</sweep.budget>
+        <sweep.percall>60</sweep.percall>
     </properties>
 
     <dependencies>
@@ -72,9 +76,10 @@
                 </configuration>
             </plugin>
 
-            <!-- Runs the AtlasReconstruct CLI in a clean JVM with the Z3 native path.
+            <!-- Runs a wev.smt.cli tool in a clean JVM with the Z3 native path.
                  Usage (after `mvn test`, which compiles and copies the natives):
-                     mvn -q exec:exec
+                     mvn -q exec:exec                      (default: AtlasReconstruct)
+                     mvn -q exec:exec@scalability-sweep    (Day-9 scalability sweep)
                  The <classpath/> token expands to the full runtime classpath. -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -89,6 +94,24 @@
                         <argument>wev.smt.cli.AtlasReconstruct</argument>
                     </arguments>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>scalability-sweep</id>
+                        <configuration>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-Xmx2g</argument>
+                                <argument>-Djava.library.path=${native.dir}</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>wev.smt.cli.ScalabilitySweep</argument>
+                                <argument>eval</argument>
+                                <argument>${sweep.budget}</argument>
+                                <argument>${sweep.percall}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

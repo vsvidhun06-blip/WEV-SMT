@@ -1,5 +1,6 @@
 target/
 *.csv
+!eval/*.csv
 mismatches.txt
 *.iml
 .idea/
