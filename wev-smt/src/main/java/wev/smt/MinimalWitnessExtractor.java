@@ -265,9 +265,10 @@ public final class MinimalWitnessExtractor {
                 activeChoices.add(bmgr.and(rfVar, activeVars.get(w)));
                 cs.add(bmgr.implication(rfVar,
                         bmgr.makeBoolean(w.getValue() == r.getValue())));
-                cs.add(bmgr.implication(
-                        bmgr.and(rfVar, bothActive(w, r)),
-                        imgr.lessThan(enc.getPosVar(w), enc.getPosVar(r))));
+                // Pass 3 Stage 2: rf-forward edge (rf ⇒ pos(w) < pos(r)) dropped to
+                // match EventStructureEncoder.encodeWellFormedness (the two
+                // well-formedness encoders must relax in lockstep). Per-location order
+                // is re-imposed by coherencePerLocation; see docs/pass-3-plan.md §1.
             }
             if (activeChoices.isEmpty()) {
                 cs.add(bmgr.not(activeVars.get(r)));

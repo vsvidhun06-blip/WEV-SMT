@@ -2,9 +2,11 @@ package wev.smt;
 
 import com.weakest.model.Event;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -16,7 +18,8 @@ import java.util.Set;
  * which is therefore left untouched.
  *
  * <p>Three relations, each mapping a <strong>consumer</strong> event to the set of
- * <strong>producer</strong> events whose value it syntactically uses:
+ * {@link DepEdge}s recording the <strong>producer</strong> events whose value it
+ * syntactically uses:
  * <ul>
  *   <li>{@code data} — the value the consumer writes uses the producer's value;</li>
  *   <li>{@code addr} — the consumer's address uses the producer's value;</li>
@@ -27,16 +30,29 @@ import java.util.Set;
  * syntactically depends on the value read by {@code r}" — i.e. the map points from
  * the consumer ({@code w}) to the producer ({@code r}).
  *
- * <p>Stage 1 (this commit) only records the edges; no consistency axiom reads them.
- * The distinction between a <em>real</em> dependency and a <em>fake</em> (e.g.
- * {@code r ^ r}, the identity) one is <strong>not</strong> represented here — both
- * carry the same edges — and is left to the Stage-2 value-aware jf-coherence axiom.
+ * <p>Pass 3 Stage 2 adds the {@link DepEdge#isSemantic()} flag. Only <em>semantic</em>
+ * dependencies — those that survive compiler optimisation, i.e. the written value
+ * genuinely varies with the read — participate in the WEAKEST jf-coherence axiom
+ * (Chakraborty &amp; Vafeiadis §3). A <em>fake</em> dependency (e.g. {@code r ^ r},
+ * the identity: syntactically mentions the read but is in fact constant) is
+ * recorded with {@code isSemantic = false} and excluded from {@link #semanticEdges()},
+ * so it cannot close a thin-air cycle. Edges added without an explicit flag default
+ * to {@code isSemantic = true}.
  */
 public final class DependencyInfo {
 
-    private final Map<Event, Set<Event>> dataDeps = new LinkedHashMap<>();
-    private final Map<Event, Set<Event>> addrDeps = new LinkedHashMap<>();
-    private final Map<Event, Set<Event>> ctrlDeps = new LinkedHashMap<>();
+    /**
+     * A single dependency edge: the {@code consumer}'s value/address/control uses
+     * the {@code producer}'s value. {@code isSemantic} is {@code true} when the
+     * dependency is real (survives optimisation) and {@code false} for a syntactic
+     * but value-irrelevant ("fake") dependency. Only semantic edges feed
+     * {@link #semanticEdges()} and hence the jf-coherence axiom.
+     */
+    public record DepEdge(Event consumer, Event producer, boolean isSemantic) { }
+
+    private final Map<Event, Set<DepEdge>> dataDeps = new LinkedHashMap<>();
+    private final Map<Event, Set<DepEdge>> addrDeps = new LinkedHashMap<>();
+    private final Map<Event, Set<DepEdge>> ctrlDeps = new LinkedHashMap<>();
 
     /** An empty sidecar — the default for every dependency-free litmus case. */
     public static DependencyInfo empty() {
@@ -44,30 +60,42 @@ public final class DependencyInfo {
     }
 
     public void addDataDep(Event consumer, Event producer) {
-        link(dataDeps, consumer, producer);
+        addDataDep(consumer, producer, true);
+    }
+
+    public void addDataDep(Event consumer, Event producer, boolean isSemantic) {
+        link(dataDeps, consumer, producer, isSemantic);
     }
 
     public void addAddrDep(Event consumer, Event producer) {
-        link(addrDeps, consumer, producer);
+        addAddrDep(consumer, producer, true);
+    }
+
+    public void addAddrDep(Event consumer, Event producer, boolean isSemantic) {
+        link(addrDeps, consumer, producer, isSemantic);
     }
 
     public void addCtrlDep(Event consumer, Event producer) {
-        link(ctrlDeps, consumer, producer);
+        addCtrlDep(consumer, producer, true);
+    }
+
+    public void addCtrlDep(Event consumer, Event producer, boolean isSemantic) {
+        link(ctrlDeps, consumer, producer, isSemantic);
     }
 
     /** Producers whose value flows (as data) into {@code e}; empty if none. */
     public Set<Event> getDataDeps(Event e) {
-        return view(dataDeps, e);
+        return producers(dataDeps, e);
     }
 
     /** Producers whose value forms {@code e}'s address; empty if none. */
     public Set<Event> getAddrDeps(Event e) {
-        return view(addrDeps, e);
+        return producers(addrDeps, e);
     }
 
     /** Producers whose value gates {@code e}'s control flow; empty if none. */
     public Set<Event> getCtrlDeps(Event e) {
-        return view(ctrlDeps, e);
+        return producers(ctrlDeps, e);
     }
 
     /** Union of the data, addr and ctrl producers of {@code e}; empty if none. */
@@ -79,33 +107,68 @@ public final class DependencyInfo {
         return Collections.unmodifiableSet(all);
     }
 
+    /**
+     * Every <em>semantic</em> dependency edge across {@code data ∪ addr ∪ ctrl}
+     * (those with {@code isSemantic = true}). This is the relation the Pass-3
+     * Stage-2 jf-coherence axiom ({@code AxiomaticConsistency.jfCoherence}) treats
+     * as {@code sdep}: each edge contributes a {@code layer(producer) < layer(consumer)}
+     * ordering, so a cycle through {@code sdep ∪ jf} is forbidden (thin-air).
+     */
+    public List<DepEdge> semanticEdges() {
+        List<DepEdge> out = new ArrayList<>();
+        for (Map<Event, Set<DepEdge>> rel : List.of(dataDeps, addrDeps, ctrlDeps)) {
+            for (Set<DepEdge> edges : rel.values()) {
+                for (DepEdge e : edges) {
+                    if (e.isSemantic()) out.add(e);
+                }
+            }
+        }
+        return Collections.unmodifiableList(out);
+    }
+
     /** Whether this sidecar carries no dependency edge of any kind. */
     public boolean isEmpty() {
         return dataDeps.isEmpty() && addrDeps.isEmpty() && ctrlDeps.isEmpty();
     }
 
     /**
-     * The full data-dependency relation, consumer → producers (read-only). Used by
-     * {@link EventStructureEncoder} to mint one decision var per edge.
+     * The full data-dependency relation, consumer → producers (read-only, flag
+     * dropped). Used by {@link EventStructureEncoder} to mint one inert decision var
+     * per edge — those vars do not distinguish semantic from fake dependencies.
      */
     public Map<Event, Set<Event>> dataDepMap() {
-        return Collections.unmodifiableMap(dataDeps);
+        return producerMap(dataDeps);
     }
 
     public Map<Event, Set<Event>> addrDepMap() {
-        return Collections.unmodifiableMap(addrDeps);
+        return producerMap(addrDeps);
     }
 
     public Map<Event, Set<Event>> ctrlDepMap() {
-        return Collections.unmodifiableMap(ctrlDeps);
+        return producerMap(ctrlDeps);
     }
 
-    private static void link(Map<Event, Set<Event>> rel, Event consumer, Event producer) {
-        rel.computeIfAbsent(consumer, k -> new LinkedHashSet<>()).add(producer);
+    private static void link(Map<Event, Set<DepEdge>> rel, Event consumer,
+                             Event producer, boolean isSemantic) {
+        rel.computeIfAbsent(consumer, k -> new LinkedHashSet<>())
+                .add(new DepEdge(consumer, producer, isSemantic));
     }
 
-    private static Set<Event> view(Map<Event, Set<Event>> rel, Event e) {
-        Set<Event> s = rel.get(e);
-        return s == null ? Collections.emptySet() : Collections.unmodifiableSet(s);
+    private static Set<Event> producers(Map<Event, Set<DepEdge>> rel, Event e) {
+        Set<DepEdge> edges = rel.get(e);
+        if (edges == null) return Collections.emptySet();
+        Set<Event> out = new LinkedHashSet<>();
+        for (DepEdge d : edges) out.add(d.producer());
+        return Collections.unmodifiableSet(out);
+    }
+
+    private static Map<Event, Set<Event>> producerMap(Map<Event, Set<DepEdge>> rel) {
+        Map<Event, Set<Event>> out = new LinkedHashMap<>();
+        for (Map.Entry<Event, Set<DepEdge>> e : rel.entrySet()) {
+            Set<Event> ps = new LinkedHashSet<>();
+            for (DepEdge d : e.getValue()) ps.add(d.producer());
+            out.put(e.getKey(), ps);
+        }
+        return Collections.unmodifiableMap(out);
     }
 }

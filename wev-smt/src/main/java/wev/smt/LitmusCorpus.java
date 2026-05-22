@@ -103,9 +103,15 @@ public final class LitmusCorpus {
         cs.add(c("3.LB", build3LB(), exp(F, F, F, A, A)));
         cs.add(c("3.SB", build3SB(), exp(F, U, U, U, A)));
 
-        // ── WEAKEST-specific: out-of-thin-air, forbidden by WEAKEST ───────────
-        cs.add(c("LB-fake-dep", buildLB(RLX, RLX), exp(F, F, F, F, F)));
-        cs.add(c("OOTA-cycle",  buildLB(RLX, RLX), exp(F, F, F, F, F)));
+        // ── No-dependency LB shapes (Pass 3 Stage 2 expectation correction) ───
+        // These were placeholders wiring the bare LB structure (no dependency edges)
+        // yet expecting FORBIDDEN under every model. The (…,F,F) under RA/WEAKEST was
+        // an artifact of the old well-formedness rf-forward lock (docs/pass-3-plan.md
+        // §3), not a model verdict: a dependency-free LB shape is ALLOWED under bare RA
+        // and WEAKEST. Genuine OOTA forbidding now comes from the semantic-dependency
+        // cases LBdep-real/LBdep-addr, so these are corrected to (F,F,F,A,A) = LB.
+        cs.add(c("LB-fake-dep", buildLB(RLX, RLX), exp(F, F, F, A, A)));
+        cs.add(c("OOTA-cycle",  buildLB(RLX, RLX), exp(F, F, F, A, A)));
 
         // ── Synchronisation gradations on MP / LB ─────────────────────────────
         cs.add(c("MP-rel",    buildMP(REL, RLX), exp(F, F, A, A, A)));
@@ -113,20 +119,19 @@ public final class LitmusCorpus {
         cs.add(c("MP-relacq", buildMP(REL, ACQ), exp(F, F, F, F, U)));
         cs.add(c("LB-acqrel", buildLB(REL, ACQ), exp(F, F, F, U, A)));
 
-        // ── Pass 3 (Stage 1): dependency-carrying LB variants ─────────────────
-        // These three carry syntactic addr/data dependency edges in a DependencyInfo
-        // sidecar; no consistency axiom reads them yet, so every cell is UNKNOWN (not
-        // compared) and they add no mismatch. They are the litmus the Stage-2
-        // jf-coherence axiom must separate: LBdep-fake should end up ALLOWED (the dep
-        // is the identity, no real causality), LBdep-real/LBdep-addr FORBIDDEN (a true
-        // causal cycle). Named distinctly from the existing no-dep OOTA twins
-        // (LB-fake-dep, OOTA-cycle) to avoid colliding with their wired verdicts.
+        // ── Pass 3 (Stage 2): dependency-carrying LB variants ─────────────────
+        // The Stage-2 jf-coherence axiom (AxiomaticConsistency.jfCoherence) separates
+        // these by dependency content. All three share LB's structure, so SC/TSO/PSO
+        // forbid them (preserved R→W) and bare RA allows them (no thin-air axiom); only
+        // WEAKEST distinguishes. LBdep-fake's dependency is the identity (isSemantic=
+        // false) ⇒ no real cycle ⇒ ALLOWED under WEAKEST; LBdep-real/LBdep-addr carry a
+        // real (semantic) dependency ⇒ thin-air cycle ⇒ FORBIDDEN under WEAKEST.
         EsDeps lbFake = buildLBFakeDep();
-        cs.add(c("LBdep-fake", lbFake.es(), exp(U, U, U, U, U), lbFake.deps()));
+        cs.add(c("LBdep-fake", lbFake.es(), exp(F, F, F, A, A), lbFake.deps()));
         EsDeps lbReal = buildLBRealDep();
-        cs.add(c("LBdep-real", lbReal.es(), exp(U, U, U, U, U), lbReal.deps()));
+        cs.add(c("LBdep-real", lbReal.es(), exp(F, F, F, A, F), lbReal.deps()));
         EsDeps lbAddr = buildLBAddrDep();
-        cs.add(c("LBdep-addr", lbAddr.es(), exp(U, U, U, U, U), lbAddr.deps()));
+        cs.add(c("LBdep-addr", lbAddr.es(), exp(F, F, F, A, F), lbAddr.deps()));
 
         return cs;
     }
@@ -520,17 +525,18 @@ public final class LitmusCorpus {
     /**
      * LB with a <em>fake</em> data dependency, e.g. {@code x = r ^ r + 1}: the value
      * written syntactically mentions the read but is in fact constant, so there is no
-     * real causal cycle and WEAKEST should ALLOW it. Stage 1 records the same data-dep
-     * edges as the real case below — telling them apart needs Stage-2 value reasoning.
+     * real causal cycle and WEAKEST ALLOWS it. The edge is recorded with
+     * {@code isSemantic = false}, so {@code jfCoherence} excludes it from {@code sdep}.
      */
     private static EsDeps buildLBFakeDep() {
-        return lbWithDeps(DependencyInfo::addDataDep);
+        return lbWithDeps((deps, consumer, producer) ->
+                deps.addDataDep(consumer, producer, false));
     }
 
     /**
      * LB with a <em>real</em> data dependency, e.g. {@code x = r + 1}: the written
-     * value genuinely varies with the read, closing a true causal cycle that WEAKEST
-     * should FORBID (out-of-thin-air).
+     * value genuinely varies with the read (recorded {@code isSemantic = true}, the
+     * default), closing a true causal cycle that WEAKEST FORBIDS (out-of-thin-air).
      */
     private static EsDeps buildLBRealDep() {
         return lbWithDeps(DependencyInfo::addDataDep);

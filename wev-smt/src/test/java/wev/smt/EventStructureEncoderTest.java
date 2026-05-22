@@ -16,7 +16,6 @@ import org.sosy_lab.java_smt.SolverContextFactory;
 import org.sosy_lab.java_smt.SolverContextFactory.Solvers;
 import org.sosy_lab.java_smt.api.BooleanFormula;
 import org.sosy_lab.java_smt.api.Model;
-import org.sosy_lab.java_smt.api.NumeralFormula.IntegerFormula;
 import org.sosy_lab.java_smt.api.ProverEnvironment;
 import org.sosy_lab.java_smt.api.SolverContext;
 import org.sosy_lab.java_smt.api.SolverContext.ProverOptions;
@@ -56,24 +55,27 @@ class EventStructureEncoderTest {
         es.addReadsFrom(r, w);
 
         EventStructureEncoder enc = new EventStructureEncoder(ctx, es);
-        BooleanFormula phi = enc.encodeWellFormedness();
+        AxiomaticConsistency ax = new AxiomaticConsistency(enc);
+        BooleanFormula wf = enc.encodeWellFormedness();
 
-        try (ProverEnvironment p =
-                     ctx.newProverEnvironment(ProverOptions.GENERATE_MODELS)) {
-            p.addConstraint(phi);
+        // (1) The wired W/R is well-formed.
+        try (ProverEnvironment p = ctx.newProverEnvironment()) {
+            p.addConstraint(wf);
             assertFalse(p.isUnsat(), "2-event W/R with rf wired must be SAT");
+        }
 
-            try (Model m = p.getModel()) {
-                IntegerFormula posW = enc.getEventVars().get(w);
-                IntegerFormula posR = enc.getEventVars().get(r);
-                BigInteger pw = m.evaluate(posW);
-                BigInteger pr = m.evaluate(posR);
-                assertNotNull(pw);
-                assertNotNull(pr);
-                // The rf-implication forces pos(w) < pos(r).
-                assertTrue(pw.compareTo(pr) < 0,
-                        "rf-pred write must precede read in execution order");
-            }
+        // (2) Pass 3 Stage 2: the global rf-forward edge (rf ⇒ pos(w) < pos(r)) was
+        // removed from well-formedness, so `pos` is now only a po∪co linearization and
+        // no longer encodes read-after-write — we therefore no longer assert
+        // pos(w) < pos(r) here. Per-location read-after-write moved to
+        // AxiomaticConsistency.coherencePerLocation (over its own colayer vars), so we
+        // instead assert the wired read stays consistent under it. The negative side
+        // (a coherence-violating read is rejected) is covered end-to-end by the
+        // CoRR/CoRW/CoWR/CoWW corpus cases in AtlasReconstruct.
+        try (ProverEnvironment p = ctx.newProverEnvironment()) {
+            p.addConstraint(enc.getBmgr().and(wf, ax.coherencePerLocation()));
+            assertFalse(p.isUnsat(),
+                    "wired W/R must stay consistent under per-location coherence");
         }
     }
 

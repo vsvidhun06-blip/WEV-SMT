@@ -106,6 +106,8 @@ public final class EventStructureEncoder {
     }
 
     public EventStructure getEventStructure() { return es; }
+    /** The syntactic dependency sidecar; {@code DependencyInfo.empty()} if none. */
+    public DependencyInfo getDependencyInfo() { return deps; }
     public SolverContext getContext() { return ctx; }
     public BooleanFormulaManager getBmgr() { return bmgr; }
     public IntegerFormulaManager getImgr() { return imgr; }
@@ -189,8 +191,13 @@ public final class EventStructureEncoder {
                 BooleanFormula rf = rfVars.get(new EventPair(w, r));
                 if (rf == null) continue;
                 choices.add(rf);
-                cs.add(bmgr.implication(rf,
-                        imgr.lessThan(eventVars.get(w), eventVars.get(r))));
+                // Pass 3 Stage 2: the global rf-forward edge (rf ⇒ pos(w) < pos(r))
+                // is intentionally NOT emitted here. It made well-formedness an
+                // SC-strength backstop (acyclic(po∪rf∪co)) on every model, locking the
+                // load-buffering shape that RA/WEAKEST permit (docs/pass-3-plan.md §1).
+                // Per-location read-after-write is re-imposed for every model by
+                // AxiomaticConsistency.coherencePerLocation (addRfLoc); SC/TSO/PSO
+                // re-impose the global rf ordering in their own acyclic layers (addRf).
                 cs.add(bmgr.implication(rf,
                         bmgr.makeBoolean(w.getValue() == r.getValue())));
             }

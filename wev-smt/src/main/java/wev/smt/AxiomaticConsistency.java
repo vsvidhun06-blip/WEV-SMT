@@ -57,10 +57,13 @@ import java.util.function.Function;
  *   <li>RA: RC11 release/acquire coherence {@code irreflexive(hb ; eco?)}, with
  *       {@code hb = (po ∪ sw)+} and {@code eco = (rf ∪ co ∪ fr)+}; see
  *       {@link #irreflexiveHbEco}.</li>
- *   <li>WEAKEST: (po ∪ rf) acyclic plus the jf-coherence axiom from
- *       {@code com.weakest.checker.ConsistencyChecker.isJustifiableGiven} — for any
- *       non-relaxed read {@code r} reading from {@code w}, no other write {@code w'}
- *       to the same location may be po-before {@code r} and reachable from {@code w}.</li>
+ *   <li>WEAKEST (Pass 3 Stage 2): {@link #coherencePerLocation} plus the Weakestmo
+ *       no-thin-air axiom {@link #jfCoherence} = {@code acyclic(sdep ∪ jf)}, where
+ *       {@code sdep} is the semantic dependency relation and {@code jf} (= {@code rf})
+ *       the justification (Chakraborty &amp; Vafeiadis, POPL 2019, §3). The old
+ *       {@code acyclic(po ∪ rf)} over-approximation is dropped — it forbade the
+ *       well-justified load buffering WEAKEST permits. A legacy non-relaxed-read guard
+ *       (ConsistencyChecker.isJustifiableGiven mirror) is retained but inert.</li>
  * </ul>
  */
 public final class AxiomaticConsistency {
@@ -139,13 +142,19 @@ public final class AxiomaticConsistency {
     public BooleanFormula consistencyWEAKEST(Function<Event, BooleanFormula> active) {
         Map<Event, IntegerFormula> layer = freshLayer("weakest");
         List<BooleanFormula> cs = new ArrayList<>();
-        addPo(cs, layer, false, false, active);
-        addRf(cs, layer, false, false, active);
 
-        // Mirror ConsistencyChecker.isJustifiableGiven: for any non-relaxed read r
-        // reading from w, no other write w' to the same variable may be po-reachable
-        // to r AND reach-after w in (po ∪ rf). Layer monotonicity already enforces
-        // the latter, so the SMT condition reduces to: rfVar(w,r) ⇒ layer(w) ≥ layer(w').
+        // Pass 3 Stage 2: the crude acyclic(po ∪ rf) over-approximation (addPo + addRf
+        // in one layer) is REMOVED. It forbade *all* load buffering, including the
+        // well-justified LB that WEAKEST permits. The dependency-sensitive no-thin-air
+        // condition is now jfCoherence(active), added below (docs/pass-3-plan.md §2).
+
+        // Legacy non-relaxed-read justification guard (mirror of
+        // ConsistencyChecker.isJustifiableGiven): for a non-relaxed read r reading from
+        // w, no other same-location write w' that is po-before r may sit above w in the
+        // po∪rf order. It relied on the removed addPo+addRf layer for that ordering, so
+        // with the layer no longer grounded it is now subsumed by jfCoherence +
+        // coherencePerLocation (and adds no constraint — all ≥, satisfiable by equal
+        // layers). Retained per docs/pass-3-plan.md §2.5; harmless.
         for (Event re : es.getEvents()) {
             if (!(re instanceof ReadEvent r)) continue;
             if (r.getMemoryOrder() == MemoryOrder.RELAXED) continue;
@@ -163,7 +172,67 @@ public final class AxiomaticConsistency {
             }
         }
         cs.add(coherencePerLocation(active));
+        cs.add(jfCoherence(active));
         return bmgr.and(cs);
+    }
+
+    /**
+     * Pass 3 Stage 2 — the Weakestmo no-thin-air axiom: {@code acyclic(sdep ∪ jf)}.
+     *
+     * <p>Following Chakraborty &amp; Vafeiadis, "Grounding Thin-Air Reads with Event
+     * Structures" (POPL 2019, §3): a read must be justifiable through writes whose
+     * existence does not transitively depend on that read. {@code sdep} is the union of
+     * <em>semantic</em> dependency edges (data/addr/ctrl with {@code isSemantic=true};
+     * see {@link DependencyInfo#semanticEdges()}); {@code jf} (justified-from) coincides
+     * with {@code rf} in this single-execution encoding. A cycle through
+     * {@code sdep ∪ jf} is the thin-air pattern and is forbidden; a <em>fake</em>
+     * (identity) dependency contributes no semantic edge and so cannot close one — which
+     * is precisely what separates {@code LBdep-fake} (allowed) from {@code LBdep-real}
+     * /{@code LBdep-addr} (forbidden).
+     *
+     * <p>Encoded with the integer-layer trick (as in {@link #coherencePerLocation}): a
+     * fresh {@code layer} per event, each edge forcing a strict {@code <} ordering with
+     * the value <em>producer</em> before the value <em>consumer</em> in both cases —
+     * <ul>
+     *   <li>semantic dep stored {@code consumer ← producer}: {@code layer(producer) < layer(consumer)};</li>
+     *   <li>{@code jf_w_r} (≡ {@code rf_w_r}): {@code layer(w) < layer(r)}.</li>
+     * </ul>
+     * A strict integer order admits no cycle, so this is exactly
+     * {@code irreflexive((sdep ∪ jf)⁺)}. Base edges are gated by {@code active}.
+     *
+     * <p><b>Polarity</b> (verified against the LB cycle): with these directions the
+     * real-dependency LB closes {@code wx→r1→wy→r2→wx} into a contradiction
+     * ({@code layer(wx) < layer(r1) < layer(wy) < layer(r2) < layer(wx)}), so it is
+     * UNSAT/forbidden; the fake-dependency LB has no {@code sdep} edges and stays SAT.
+     * (The naive {@code jf_w_r ⇒ layer(r) < layer(w)} would leave it satisfiable and is
+     * wrong.)
+     */
+    public BooleanFormula jfCoherence(Function<Event, BooleanFormula> active) {
+        Map<Event, IntegerFormula> layer = freshLayer("jfco");
+        List<BooleanFormula> cs = new ArrayList<>();
+
+        // Semantic dependency edges: producer → consumer (value source before sink).
+        for (DependencyInfo.DepEdge e : enc.getDependencyInfo().semanticEdges()) {
+            IntegerFormula lp = layer.get(e.producer());
+            IntegerFormula lc = layer.get(e.consumer());
+            if (lp == null || lc == null) continue;
+            cs.add(bmgr.implication(both(active, e.producer(), e.consumer()),
+                    imgr.lessThan(lp, lc)));
+        }
+
+        // jf = rf (committed justification), and jf_w_r ⇒ layer(w) < layer(r).
+        for (Map.Entry<EventPair, BooleanFormula> e : enc.getRfVars().entrySet()) {
+            Event w = e.getKey().from();
+            Event r = e.getKey().to();
+            BooleanFormula rfVar = e.getValue();
+            BooleanFormula jfVar = enc.getJfVars().get(e.getKey());
+            BooleanFormula edge = (jfVar != null) ? jfVar : rfVar;
+            if (jfVar != null) cs.add(bmgr.equivalence(jfVar, rfVar));
+            cs.add(bmgr.implication(bmgr.and(edge, both(active, w, r)),
+                    imgr.lessThan(layer.get(w), layer.get(r))));
+        }
+
+        return cs.isEmpty() ? bmgr.makeTrue() : bmgr.and(cs);
     }
 
     // ── RC11 release/acquire coherence: irreflexive(hb ; eco?) ────────────
