@@ -291,10 +291,26 @@ public final class LitmusParser {
         private static final Pattern INIT_MEM = Pattern.compile(
                 "([A-Za-z_]\\w*)\\s*=\\s*(-?\\d+|0x[0-9A-Fa-f]+)");
 
+        /**
+         * Optional metadata between the header and the init block, as emitted by herd7's
+         * diy/diycross generators: a quoted one-line description and {@code KEY=value}
+         * annotation lines ({@code Cycle=}, {@code Com=}, {@code Orig=}, {@code Prefetch=},
+         * {@code Generator=}, {@code Relax=}, {@code Safe=}, …). These are not comments,
+         * so {@link #isIgnorable} does not catch them; they are skipped only here, before
+         * the {@code {} block, and never confused with it (a line opening with {@code &#123;}
+         * is never treated as metadata) nor with the {@code x=0;} assignments inside it.
+         */
+        private static boolean isPreInitMetadata(String line) {
+            String t = line.strip();
+            if (t.isEmpty() || t.startsWith("{")) return false;
+            if (t.startsWith("\"")) return true;                 // quoted description
+            return t.matches("[A-Za-z_][\\w.]*\\s*=.*");          // KEY=value annotation
+        }
+
         /** Parse {@code { … }}; returns the index of the line after the closing brace. */
         private int parseInitBlock(int from) {
             int i = from;
-            while (i < lines.length && isIgnorable(lines[i])) i++;
+            while (i < lines.length && (isIgnorable(lines[i]) || isPreInitMetadata(lines[i]))) i++;
             if (i >= lines.length) {
                 throw new ParseException(src, -1, ParseException.Kind.MALFORMED,
                         "missing initial-state block");

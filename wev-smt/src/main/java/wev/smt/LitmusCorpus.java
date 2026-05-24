@@ -133,6 +133,24 @@ public final class LitmusCorpus {
         EsDeps lbAddr = buildLBAddrDep();
         cs.add(c("LBdep-addr", lbAddr.es(), exp(F, F, F, A, F), lbAddr.deps()));
 
+        // ── Day 11: representative real-corpus generalisations ────────────────
+        // Canonical multi-thread tests that validated cleanly in the herd7/Dat3M
+        // sweep — lifted here as hand-built event structures so the atlas exercises
+        // wider cycles and the dependency-driven WEAKEST contribution at 3-thread
+        // width. Corpus frequencies (validated, status=OK): 3.2W ×25 (Dat3M),
+        // 3.LB+data ×12 (Dat3M), 3.SB/6.SB family ×34/×2 (Dat3M/herd7).
+        cs.add(c("3.2W", build32W(), exp(F, F, A, A, A)));   // 3-way 2+2W: TSO|PSO separation
+        cs.add(c("6.SB", build6SB(), exp(F, U, U, U, A)));   // 6-thread SB: SC forbids, WEAKEST allows
+        // The 3-thread analogue of LBdep-fake/real: same load-buffering cycle and
+        // identical encoding cost, opposite WEAKEST verdict purely by dependency
+        // semantics. The real-dep variant is a NEW separating witness for the
+        // jf-coherence contribution at 3-thread width (RA allows, WEAKEST forbids).
+        EsDeps lb3Fake = lb3WithDeps((deps, consumer, producer) ->
+                deps.addDataDep(consumer, producer, false));
+        cs.add(c("3.LBdep-fake", lb3Fake.es(), exp(F, F, F, A, A), lb3Fake.deps()));
+        EsDeps lb3Real = lb3WithDeps(DependencyInfo::addDataDep);
+        cs.add(c("3.LBdep-real", lb3Real.es(), exp(F, F, F, A, F), lb3Real.deps()));
+
         return cs;
     }
 
@@ -494,6 +512,56 @@ public final class LitmusCorpus {
         return es;
     }
 
+    /**
+     * 3.2W: a three-thread 2+2W. Each thread issues two writes, and all three
+     * per-location modification orders flip cyclically against program order. Like
+     * 2+2W it needs W→W reordering, so SC and TSO forbid it (TSO keeps store order)
+     * while PSO and weaker allow it.
+     */
+    private static EventStructure build32W() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = w(0, "x", RLX, 0);
+        WriteEvent iy = w(0, "y", RLX, 0);
+        WriteEvent iz = w(0, "z", RLX, 0);
+        WriteEvent wx1 = w(1, "x", RLX, 1);
+        WriteEvent wy1 = w(1, "y", RLX, 1);
+        WriteEvent wy2 = w(2, "y", RLX, 2);
+        WriteEvent wz1 = w(2, "z", RLX, 1);
+        WriteEvent wz2 = w(3, "z", RLX, 2);
+        WriteEvent wx2 = w(3, "x", RLX, 2);
+        add(es, ix, iy, iz, wx1, wy1, wy2, wz1, wz2, wx2);
+        es.addProgramOrder(wx1, wy1);   // T1: x=1; y=1
+        es.addProgramOrder(wy2, wz1);   // T2: y=2; z=1
+        es.addProgramOrder(wz2, wx2);   // T3: z=2; x=2
+        co(es, "x", ix, wx2, wx1);      // x final = 1 (T1's write wins over T3's)
+        co(es, "y", iy, wy1, wy2);      // y final = 2 (T2's write wins over T1's)
+        co(es, "z", iz, wz1, wz2);      // z final = 2 (T3's write wins over T2's)
+        return es;
+    }
+
+    /**
+     * 6.SB: a six-thread store-buffering cycle — the 3.SB family scaled up. Each
+     * thread writes its own location then reads the next thread's location and
+     * misses it; SC forbids the resulting cycle, WEAKEST allows it.
+     */
+    private static EventStructure build6SB() {
+        EventStructure es = new EventStructure();
+        final int n = 6;
+        final String[] v = {"a", "b", "c", "d", "e", "f"};
+        WriteEvent[] init = new WriteEvent[n];
+        for (int i = 0; i < n; i++) { init[i] = w(0, v[i], RLX, 0); es.addEvent(init[i]); }
+        for (int t = 0; t < n; t++) {
+            WriteEvent wr = w(t + 1, v[t], RLX, 1);
+            ReadEvent rd = r(t + 1, v[(t + 1) % n], RLX, "r" + t);
+            es.addEvent(wr);
+            es.addEvent(rd);
+            es.addProgramOrder(wr, rd);
+            co(es, v[t], init[t], wr);
+            es.addReadsFrom(rd, init[(t + 1) % n]);   // read misses the next thread's write
+        }
+        return es;
+    }
+
     // ── Pass 3 dependency-carrying builders ──────────────────────────────────
 
     /**
@@ -557,10 +625,26 @@ public final class LitmusCorpus {
      * (producer) whose value flows into it.
      */
     private static EsDeps lbWithDeps(DepEdge edge) {
-        EsDeps skel = lbSkeleton();
+        return wireReadToWriteDeps(lbSkeleton(), edge);
+    }
+
+    /**
+     * The 3-thread analogue of {@link #lbWithDeps}: take the {@link #build3LB}
+     * load-buffering cycle and make every thread's write depend on its own prior
+     * read via the supplied edge kind. A real (semantic) edge closes a three-leg
+     * thin-air cycle that WEAKEST forbids; a fake (identity) edge does not.
+     */
+    private static EsDeps lb3WithDeps(DepEdge edge) {
+        return wireReadToWriteDeps(new EsDeps(build3LB(), DependencyInfo.empty()), edge);
+    }
+
+    /**
+     * Attach a consumer→producer dependency for every program-order read→write step
+     * in the skeleton, using the supplied edge kind. Convention is dep(write, read):
+     * the write (consumer) depends on the read (producer) whose value flows into it.
+     */
+    private static EsDeps wireReadToWriteDeps(EsDeps skel, DepEdge edge) {
         EventStructure es = skel.es();
-        // Recover the events by their role in the skeleton's program order: each
-        // thread is r(read) →po w(write).
         DependencyInfo deps = new DependencyInfo();
         for (Map.Entry<Integer, List<Integer>> po : es.getProgramOrder().entrySet()) {
             Event from = es.getEventById(po.getKey());

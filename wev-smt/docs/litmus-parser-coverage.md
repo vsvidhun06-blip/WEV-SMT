@@ -33,6 +33,14 @@ program order, `rf`/`co` cardinalities and dependency edges (absolute event ids 
 from the shared global counter and are intentionally not reset, so they accumulate
 across a corpus but never change the *shape*).
 
+**Header metadata is skipped (Day-11 fix).** A quoted test description and any
+`KEY=value` *diy* annotations sitting between the architecture header and the `{…}`
+initial-state block are now ignored rather than mis-read. These are pervasive in the
+herd7 `herding-cats` catalogue and previously produced spurious `expected '{'`
+parse-errors; the fix lifted herd7 parse coverage substantially (see
+[`corpus-validation-findings.md`](corpus-validation-findings.md), the paper §6.2
+companion).
+
 ## Supported instructions per architecture
 
 The WEV event vocabulary is only `READ`/`WRITE` accesses with a `MemoryOrder` ∈
@@ -150,18 +158,62 @@ published tests are validatable as-is:
 6. **Coherence beyond one write per location follows textual order.** Per-location `co`
    lists the initial write then program writes as they appear in the source, rather than
    deriving the order from a final-memory clause.
+7. **AT&T x86 syntax is unparsed.** Only Intel-syntax x86 (`MOV [x], $v`) is handled;
+   AT&T forms (`movl $1, (x)`, `%reg` operands) are not, which is precisely the
+   x86_64 `kinds.txt` suite — the one corpus with clean per-model TSO ground truth.
+   Closing this unlocks the deferred external match-rate metric (findings §1, §8).
+8. **Branch labels are read as instructions.** A leading `label:` token (`L0:`,
+   `LC00:`) in the instruction stream is treated as an unknown mnemonic and the file
+   is skipped; stripping leading labels before lookup is a one-line front-end fix
+   that would recover labelled tests across all ISAs.
+9. **RISC-V coverage is lexicon-thin.** Immediate-logic `ori`/`andi`/`xori` are absent
+   from the arithmetic set (`ori` alone blocks ~1 700 Dat3M files), as are the
+   acquire/release atomic suffixes `.aq`/`.rl`, the `amo*` family and `fence.tso`.
+   These are the highest-leverage front-end gaps (findings §5).
+
+### Day-11 corpus results (empirical)
+
+The Day-11 sweep over real herd7 (4 324 files) + Dat3M (8 000 of 24 722 sampled)
+exercised the boundaries above end-to-end: **2 998 files fully parsed and validated
+across all five models with 0/2998 hierarchy-soundness violations**, 0 timeouts,
+0 crashes. The dominant *parser* boundaries seen in the wild were AArch64 MTE
+(`STG`/`LDG`, 859 files), RISC-V `ori` (1 686 files), branch labels, AT&T x86, and
+full C/LKMM programs — all coverage limits, none soundness bugs. Full breakdown,
+per-architecture coverage table, and metric reframe:
+[`corpus-validation-findings.md`](corpus-validation-findings.md) and
+[`../eval/corpus-summary.md`](../eval/corpus-summary.md).
 
 ## Validation harness
 
-`wev.smt.cli.CorpusValidation <litmus-dir> [out-dir]` parses a directory, and for every
-test × model in {SC, TSO, PSO, RA, WEAKEST} records the full-execution consistency
-verdict (`actual`), the minimum-consistent witness size, and the match against any
-per-model herd7 expectation parsed from the file's comments. It writes
-`corpus-validation.csv` (`file, arch, model, expected, actual, witness_size, solve_ms,
-match`) and prints a per-architecture summary (comparable cells, % matched, mean solve
-time, outliers). Per-model ground truth is read from comments of the form
-`SC=Forbidden  TSO=Allowed …`; a herd `Observation … Never|Sometimes|Always` line is kept
-as a coarse model-agnostic fallback.
+`wev.smt.cli.CorpusValidation <litmus-dir> <out-dir> [csv=name] [budgetMin=60]
+[perFileSec=30] [maxFiles=0] [maxEvents=64] [minwit=off] [archs=X86,PPC,ARM,RISCV,C]`
+walks a directory recursively and, for every parseable test × model in {SC, TSO, PSO,
+RA, WEAKEST}, records the full-execution consistency verdict (`actual`), an optional
+minimum-consistent witness size, the per-file solve time, and a `status`. It writes one
+CSV per corpus — `file, arch, model, expected, actual, witness_size, solve_ms, status,
+note` — and prints a per-architecture roll-up.
+
+Day-11 robustness additions (so a multi-thousand-file sweep cannot lose its work):
+
+- **Per-file isolation.** Each file gets a fresh `SolverContext` + `ShutdownManager`
+  and a scheduled `perFileSec` interrupt, so one slow/pathological file yields
+  `TIMEOUT` without poisoning the shared solver or aborting the run.
+- **Size guard.** Files whose event structure exceeds `maxEvents` (default 64) are
+  `SKIP`ped (`too-large:N-events`) — an un-interruptible `OutOfMemoryError` in the
+  O(n²) axiom encoding is otherwise unrecoverable on the largest LKMM/pointer programs.
+- **Incremental, crash-safe CSV.** The header and every row are flushed as the sweep
+  proceeds (every 200 files), so a crash mid-corpus still leaves a complete partial CSV.
+- **Status vocabulary.** `MATCH`/`MISMATCH` (only when per-model ground truth exists),
+  `OK` (validated, no ground truth — the common case on raw corpora), `SKIP`,
+  `PARSE_ERROR`, `TIMEOUT`; the `note` column carries the skip/parse-error detail.
+- **Budget.** A total `budgetMin` wall-clock cap; `minwit` (minimum-witness extraction)
+  is gated to the first half of the budget when enabled.
+
+Per-model ground truth, when present, is read from comments of the form
+`SC=Forbidden  TSO=Allowed …`; raw herd7/Dat3M `.litmus` files carry none (only x86_64
+`kinds.txt`, separately, and AT&T-syntax — see Known limitations §7), so the Day-11
+sweep recorded every validated cell as `OK` and evaluated soundness via the
+model-hierarchy invariants instead (findings §1–§2).
 
 > Reproduction note: this harness is intended to run against a downloaded herd7 /
 > Dat3M test suite, which is **not** vendored in this repository. The parser and harness
