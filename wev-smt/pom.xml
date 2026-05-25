@@ -80,6 +80,7 @@
                  Usage (after `mvn test`, which compiles and copies the natives):
                      mvn -q exec:exec                      (default: AtlasReconstruct)
                      mvn -q exec:exec@scalability-sweep    (Day-9 scalability sweep)
+                     mvn -q exec:exec@scalability-fences   (Day-12 fence/RMW sweep)
                  The <classpath/> token expands to the full runtime classpath. -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -108,6 +109,23 @@
                                 <argument>eval</argument>
                                 <argument>${sweep.budget}</argument>
                                 <argument>${sweep.percall}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>scalability-fences</id>
+                        <configuration>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-Xmx2g</argument>
+                                <argument>-Djava.library.path=${native.dir}</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>wev.smt.cli.ScalabilitySweep</argument>
+                                <argument>eval</argument>
+                                <argument>${sweep.budget}</argument>
+                                <argument>${sweep.percall}</argument>
+                                <argument>fences</argument>
                             </arguments>
                         </configuration>
                     </execution>

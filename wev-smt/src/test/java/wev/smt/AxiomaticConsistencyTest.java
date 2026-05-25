@@ -2,8 +2,11 @@ package wev.smt;
 
 import com.weakest.model.Event;
 import com.weakest.model.EventStructure;
+import com.weakest.model.FenceEvent;
+import com.weakest.model.FenceEvent.FenceKind;
 import com.weakest.model.MemoryOrder;
 import com.weakest.model.ReadEvent;
+import com.weakest.model.RMWEvent;
 import com.weakest.model.WriteEvent;
 import org.junit.jupiter.api.Test;
 import org.sosy_lab.common.ShutdownNotifier;
@@ -21,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -230,6 +234,225 @@ class AxiomaticConsistencyTest {
         es.addReadsFrom(r1, wx);
         es.addReadsFrom(r2, wy);
         es.addReadsFrom(r3, ix);
+        return es;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  Day 12: fence + RMW encoding (FULL/ACQ/REL fences, RMW atomicity & as-fence)
+    // ════════════════════════════════════════════════════════════════════════════
+
+    private static final MemoryOrder RLX = MemoryOrder.RELAXED;
+    private static final MemoryOrder ACQ = MemoryOrder.ACQUIRE;
+    private static final MemoryOrder REL = MemoryOrder.RELEASE;
+
+    /** Decide UNSAT (model forbids the wired outcome) for a freshly-built structure. */
+    private static boolean unsat(Supplier<EventStructure> build, String model) throws Exception {
+        Configuration cfg = Configuration.defaultConfiguration();
+        LogManager log = BasicLogManager.create(cfg);
+        SolverContext c = SolverContextFactory.createSolverContext(
+                cfg, log, ShutdownNotifier.createDummy(), Solvers.Z3);
+        try {
+            Event.resetCounter();
+            EventStructure es = build.get();
+            EventStructureEncoder enc = new EventStructureEncoder(c, es);
+            AxiomaticConsistency ax = new AxiomaticConsistency(enc);
+            BooleanFormula wf = enc.encodeWellFormedness();
+            BooleanFormula cons = switch (model) {
+                case "SC" -> ax.consistencySC();
+                case "TSO" -> ax.consistencyTSO();
+                case "PSO" -> ax.consistencyPSO();
+                case "RA" -> ax.consistencyRA();
+                case "WEAKEST" -> ax.consistencyWEAKEST();
+                default -> throw new IllegalStateException(model);
+            };
+            try (ProverEnvironment p = c.newProverEnvironment()) {
+                p.addConstraint(enc.getBmgr().and(wf, cons));
+                return p.isUnsat();
+            }
+        } finally {
+            c.close();
+        }
+    }
+
+    /**
+     * A FULL fence between the store and load of each SB thread restores the W→R order
+     * TSO relaxes, so SB+mfence is forbidden under TSO exactly as under SC — while plain
+     * SB stays allowed under TSO. (STOP-trigger: SB+mfence/TSO must equal the SC verdict.)
+     */
+    @Test
+    void fenceForbidsReordering() throws Exception {
+        assertTrue(unsat(AxiomaticConsistencyTest::buildSBfence, "SC"),
+                "SB+mfence is forbidden under SC");
+        assertTrue(unsat(AxiomaticConsistencyTest::buildSBfence, "TSO"),
+                "SB+mfence is forbidden under TSO (the full fence drains the store buffer)");
+        // Control: without the fence, TSO permits the store-buffering outcome.
+        assertFalse(unsat(AxiomaticConsistencyTest::buildSB, "TSO"),
+                "plain SB is allowed under TSO");
+    }
+
+    /**
+     * RMW atomicity: a write co-between the value an RMW reads and the RMW itself is
+     * forbidden under every model; the same structure with no intervening write is
+     * allowed. (The RMW's read/write share one event, so per-location coherence enforces
+     * this; the explicit rmwAtomicity axiom is the textbook statement of the same fact.)
+     */
+    @Test
+    void rmwAtomicity() throws Exception {
+        for (String m : MODELS) {
+            assertTrue(unsat(AxiomaticConsistencyTest::buildRmwAtomicViolating, m),
+                    "an intervening write breaks RMW atomicity under " + m);
+        }
+        assertFalse(unsat(AxiomaticConsistencyTest::buildRmwAtomicClean, "WEAKEST"),
+                "with no intervening write the RMW execution is allowed");
+    }
+
+    /**
+     * An x86 {@code LOCK XCHG} acts as a full fence: a strongly-ordered RMW between each
+     * SB thread's store and load restores the W→R order, so SB-with-RMW-fence is
+     * forbidden under TSO just like SB+mfence.
+     */
+    @Test
+    void rmwAsFence() throws Exception {
+        assertTrue(unsat(AxiomaticConsistencyTest::buildSBrmwFence, "SC"),
+                "SB with a full-fence RMW is forbidden under SC");
+        assertTrue(unsat(AxiomaticConsistencyTest::buildSBrmwFence, "TSO"),
+                "a locked RMW drains the store buffer, forbidding SB under TSO");
+        assertFalse(unsat(AxiomaticConsistencyTest::buildSB, "TSO"),
+                "plain SB (no RMW fence) is allowed under TSO");
+    }
+
+    /**
+     * An acquire fence after a relaxed flag-load upgrades it to an acquire read: with a
+     * release flag-store, that completes the release/acquire synchronisation, so MP is
+     * forbidden under RA. Without the fence (a plain relaxed read) RA allows MP.
+     */
+    @Test
+    void acquireFenceUpgradesRead() throws Exception {
+        assertFalse(unsat(() -> buildMPfence(REL, RLX, false, false), "RA"),
+                "MP with a relaxed flag-read is allowed under RA");
+        assertTrue(unsat(() -> buildMPfence(REL, RLX, true, false), "RA"),
+                "an acquire fence after the flag-read upgrades it to acquire, forbidding MP under RA");
+    }
+
+    /**
+     * A release fence before a relaxed flag-store upgrades it to a release write: with an
+     * acquire flag-load, that completes the synchronisation, so MP is forbidden under RA.
+     * Without the fence (a plain relaxed write) RA allows MP.
+     */
+    @Test
+    void releaseFenceUpgradesWrite() throws Exception {
+        assertFalse(unsat(() -> buildMPfence(RLX, ACQ, false, false), "RA"),
+                "MP with a relaxed flag-write is allowed under RA");
+        assertTrue(unsat(() -> buildMPfence(RLX, ACQ, false, true), "RA"),
+                "a release fence before the flag-write upgrades it to release, forbidding MP under RA");
+    }
+
+    // ── Day-12 builders ───────────────────────────────────────────────────────────
+
+    /** SB with a FULL fence between each thread's store and load. */
+    private static EventStructure buildSBfence() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = new WriteEvent(0, "x", RLX, 0, "0");
+        WriteEvent iy = new WriteEvent(0, "y", RLX, 0, "0");
+        WriteEvent wx = new WriteEvent(1, "x", RLX, 1, "1");
+        FenceEvent f1 = new FenceEvent(1, FenceKind.FULL);
+        ReadEvent r1 = new ReadEvent(1, "y", RLX, "r1");
+        WriteEvent wy = new WriteEvent(2, "y", RLX, 1, "1");
+        FenceEvent f2 = new FenceEvent(2, FenceKind.FULL);
+        ReadEvent r2 = new ReadEvent(2, "x", RLX, "r2");
+        for (Event e : new Event[]{ix, iy, wx, f1, r1, wy, f2, r2}) es.addEvent(e);
+        es.addProgramOrder(wx, f1); es.addProgramOrder(f1, r1);
+        es.addProgramOrder(wy, f2); es.addProgramOrder(f2, r2);
+        es.addCoherenceOrder("x", ix); es.addCoherenceOrder("x", wx);
+        es.addCoherenceOrder("y", iy); es.addCoherenceOrder("y", wy);
+        es.addReadsFrom(r1, iy);
+        es.addReadsFrom(r2, ix);
+        return es;
+    }
+
+    /** SB with a strongly-ordered (full-fence) RMW between each store and load. */
+    private static EventStructure buildSBrmwFence() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = new WriteEvent(0, "x", RLX, 0, "0");
+        WriteEvent iy = new WriteEvent(0, "y", RLX, 0, "0");
+        WriteEvent is1 = new WriteEvent(0, "s1", RLX, 0, "0");
+        WriteEvent is2 = new WriteEvent(0, "s2", RLX, 0, "0");
+        WriteEvent wx = new WriteEvent(1, "x", RLX, 1, "1");
+        RMWEvent u1 = new RMWEvent(1, "s1", MemoryOrder.SC, 0, 1);   // full fence
+        ReadEvent r1 = new ReadEvent(1, "y", RLX, "r1");
+        WriteEvent wy = new WriteEvent(2, "y", RLX, 1, "1");
+        RMWEvent u2 = new RMWEvent(2, "s2", MemoryOrder.SC, 0, 1);
+        ReadEvent r2 = new ReadEvent(2, "x", RLX, "r2");
+        for (Event e : new Event[]{ix, iy, is1, is2, wx, u1, r1, wy, u2, r2}) es.addEvent(e);
+        es.addProgramOrder(wx, u1); es.addProgramOrder(u1, r1);
+        es.addProgramOrder(wy, u2); es.addProgramOrder(u2, r2);
+        es.addCoherenceOrder("x", ix); es.addCoherenceOrder("x", wx);
+        es.addCoherenceOrder("y", iy); es.addCoherenceOrder("y", wy);
+        es.addCoherenceOrder("s1", is1); es.addCoherenceOrder("s1", u1);
+        es.addCoherenceOrder("s2", is2); es.addCoherenceOrder("s2", u2);
+        es.addReadsFrom(r1, iy);
+        es.addReadsFrom(r2, ix);
+        return es;
+    }
+
+    /** An RMW reads x=0 but a co-intervening write to x sits between the init and the RMW. */
+    private static EventStructure buildRmwAtomicViolating() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = new WriteEvent(0, "x", RLX, 0, "0");
+        RMWEvent u = new RMWEvent(1, "x", MemoryOrder.SC, 0, 2);   // reads 0, writes 2
+        WriteEvent w2 = new WriteEvent(2, "x", RLX, 1, "1");
+        for (Event e : new Event[]{ix, u, w2}) es.addEvent(e);
+        // co: init < w2 < RMW — w2 is wedged between the value the RMW reads and the RMW.
+        es.addCoherenceOrder("x", ix);
+        es.addCoherenceOrder("x", w2);
+        es.addCoherenceOrder("x", u);
+        return es;
+    }
+
+    /** The same structure with no write between the RMW's read source and the RMW. */
+    private static EventStructure buildRmwAtomicClean() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = new WriteEvent(0, "x", RLX, 0, "0");
+        RMWEvent u = new RMWEvent(1, "x", MemoryOrder.SC, 0, 2);
+        WriteEvent w2 = new WriteEvent(2, "x", RLX, 1, "1");
+        for (Event e : new Event[]{ix, u, w2}) es.addEvent(e);
+        // co: init < RMW < w2 — nothing intervenes between the init and the RMW.
+        es.addCoherenceOrder("x", ix);
+        es.addCoherenceOrder("x", u);
+        es.addCoherenceOrder("x", w2);
+        return es;
+    }
+
+    /**
+     * MP with optional fences. {@code wFlagMo}/{@code rFlagMo} set the flag store/load
+     * memory order; {@code acqAfterRead} inserts an ACQ fence between the flag-read and
+     * the data-read; {@code relBeforeWrite} inserts a REL fence between the data-write and
+     * the flag-write. The wired outcome is the MP violation (flag seen, data stale).
+     */
+    private static EventStructure buildMPfence(MemoryOrder wFlagMo, MemoryOrder rFlagMo,
+                                               boolean acqAfterRead, boolean relBeforeWrite) {
+        EventStructure es = new EventStructure();
+        WriteEvent idata = new WriteEvent(0, "data", RLX, 0, "0");
+        WriteEvent iflag = new WriteEvent(0, "flag", RLX, 0, "0");
+        WriteEvent wdata = new WriteEvent(1, "data", RLX, 1, "1");
+        FenceEvent frel = relBeforeWrite ? new FenceEvent(1, FenceKind.REL) : null;
+        WriteEvent wflag = new WriteEvent(1, "flag", wFlagMo, 1, "1");
+        ReadEvent rflag = new ReadEvent(2, "flag", rFlagMo, "r1");
+        FenceEvent facq = acqAfterRead ? new FenceEvent(2, FenceKind.ACQ) : null;
+        ReadEvent rdata = new ReadEvent(2, "data", RLX, "r2");
+        es.addEvent(idata); es.addEvent(iflag); es.addEvent(wdata);
+        if (frel != null) es.addEvent(frel);
+        es.addEvent(wflag); es.addEvent(rflag);
+        if (facq != null) es.addEvent(facq);
+        es.addEvent(rdata);
+        if (frel != null) { es.addProgramOrder(wdata, frel); es.addProgramOrder(frel, wflag); }
+        else es.addProgramOrder(wdata, wflag);
+        if (facq != null) { es.addProgramOrder(rflag, facq); es.addProgramOrder(facq, rdata); }
+        else es.addProgramOrder(rflag, rdata);
+        es.addCoherenceOrder("data", idata); es.addCoherenceOrder("data", wdata);
+        es.addCoherenceOrder("flag", iflag); es.addCoherenceOrder("flag", wflag);
+        es.addReadsFrom(rflag, wflag);   // sees flag = 1
+        es.addReadsFrom(rdata, idata);   // but data = 0
         return es;
     }
 }

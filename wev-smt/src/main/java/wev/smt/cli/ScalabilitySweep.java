@@ -72,7 +72,40 @@ public final class ScalabilitySweep {
 
     private static final int[] SIZES = {2, 3, 4, 5, 6, 8, 10, 12, 16};
     private static final MemoryModel[] MODELS = MemoryModel.values();
-    private static final String[] FAMILIES = {"LBChain", "SBNThread", "IRIWFan", "LBFakeChain"};
+
+    /**
+     * A named set of families with its own output CSVs. The {@code day9} suite is the
+     * original four families (default; CSVs unchanged). The {@code fences} suite (Day 12)
+     * adds the fence/RMW probes alongside the {@code SBNThread} baseline they are measured
+     * against, writing to {@code scalability-fences*.csv} so the day-9 sweep is never
+     * overwritten.
+     */
+    private record Suite(String name, String[] families, String consCsv, String sepCsv) { }
+
+    private static Suite suiteFor(String name) {
+        return switch (name) {
+            case "fences" -> new Suite("fences",
+                    new String[]{"SBNThread", "SBChainMfence", "RMWChain"},
+                    "scalability-fences.csv", "scalability-fences-separation.csv");
+            case "day9" -> new Suite("day9",
+                    new String[]{"LBChain", "SBNThread", "IRIWFan", "LBFakeChain"},
+                    "scalability-consistency.csv", "scalability-separation.csv");
+            default -> throw new IllegalArgumentException(
+                    "unknown suite '" + name + "' (expected 'day9' or 'fences')");
+        };
+    }
+
+    private static Program buildFamily(String family, int n) {
+        return switch (family) {
+            case "LBChain" -> ParametricPrograms.buildLBChain(n);
+            case "SBNThread" -> ParametricPrograms.buildSBNThread(n);
+            case "IRIWFan" -> ParametricPrograms.buildIRIWFan(n);
+            case "LBFakeChain" -> ParametricPrograms.buildLBFakeChain(n);
+            case "SBChainMfence" -> ParametricPrograms.buildSBChainMfence(n);
+            case "RMWChain" -> ParametricPrograms.buildRMWChain(n);
+            default -> throw new IllegalArgumentException("unknown family '" + family + "'");
+        };
+    }
 
     /** Spec defaults (overridable via CLI args for constrained run windows). */
     private static final double DEFAULT_BUDGET_MIN = 30.0;     // total runtime budget
@@ -114,6 +147,7 @@ public final class ScalabilitySweep {
         double budgetMin = args.length > 1 ? Double.parseDouble(args[1]) : DEFAULT_BUDGET_MIN;
         long perCallMs = args.length > 2
                 ? (long) (Double.parseDouble(args[2]) * 1000) : DEFAULT_PER_CALL_MS;
+        Suite suite = suiteFor(args.length > 3 ? args[3] : "day9");
         Caps caps = Caps.from(budgetMin, perCallMs);
         Files.createDirectories(outDir);
 
@@ -130,14 +164,14 @@ public final class ScalabilitySweep {
         com.weakest.model.Event.resetCounter();
         List<Program> programs = new ArrayList<>();
         for (int n : SIZES) {
-            programs.add(ParametricPrograms.buildLBChain(n));
-            programs.add(ParametricPrograms.buildSBNThread(n));
-            programs.add(ParametricPrograms.buildIRIWFan(n));
-            programs.add(ParametricPrograms.buildLBFakeChain(n));
+            for (String family : suite.families()) {
+                programs.add(buildFamily(family, n));
+            }
         }
 
-        System.out.printf("Scalability sweep: %d families x %d sizes x %d models%n",
-                FAMILIES.length, SIZES.length, MODELS.length);
+        System.out.printf("Scalability sweep [%s]: %d families x %d sizes x %d models%n",
+                suite.name(), suite.families().length, SIZES.length, MODELS.length);
+        System.out.printf("Families: %s%n", Arrays.toString(suite.families()));
         System.out.printf("Sizes: %s   models: %s%n",
                 Arrays.toString(SIZES), Arrays.toString(MODELS));
         System.out.printf("Caps: consistency %ds, min-witness %ds, separation %ds; "
@@ -148,13 +182,13 @@ public final class ScalabilitySweep {
         try {
             // Both phases write their CSV after every case, so a hard kill at any point
             // leaves a valid, partial CSV on disk.
-            List<ConsRow> consRows = sweepConsistency(programs, cfg, log, watchdog, caps, start, outDir);
-            printConsistencyTables(consRows);
-            checkStopTriggers(consRows);
+            List<ConsRow> consRows = sweepConsistency(programs, cfg, log, watchdog, caps, start, outDir, suite);
+            printConsistencyTables(consRows, suite);
+            checkStopTriggers(consRows, suite);
 
-            List<SepRow> sepRows = sweepSeparation(programs, cfg, log, watchdog, caps, start, outDir);
-            writeSeparationCsv(outDir, sepRows);   // final write: persist not-started cells too
-            printSeparationSummary(sepRows);
+            List<SepRow> sepRows = sweepSeparation(programs, cfg, log, watchdog, caps, start, outDir, suite);
+            writeSeparationCsv(outDir, suite, sepRows);   // final write: persist not-started cells too
+            printSeparationSummary(sepRows, suite);
 
             long elapsed = System.currentTimeMillis() - start;
             System.out.printf("%nTotal wall-clock: %.1f s (budget %.0f s). CSVs in %s%n",
@@ -168,7 +202,7 @@ public final class ScalabilitySweep {
 
     private static List<ConsRow> sweepConsistency(List<Program> programs, Configuration cfg,
                                                   LogManager log, ScheduledExecutorService watchdog,
-                                                  Caps caps, long start, Path outDir)
+                                                  Caps caps, long start, Path outDir, Suite suite)
             throws Exception {
         List<ConsRow> rows = new ArrayList<>();
         for (Program prog : programs) {
@@ -210,7 +244,7 @@ public final class ScalabilitySweep {
                     System.out.printf("  [cons] %-12s n=%-2d %-8s %-9s full=%5dms minWit=%d (%dms)%n",
                             prog.family(), prog.n(), m, verdict, full.ms(), minSize, minMs);
                 }
-                writeConsistencyCsv(outDir, rows);   // incremental: survive a hard kill
+                writeConsistencyCsv(outDir, suite, rows);   // incremental: survive a hard kill
             } finally {
                 c.close();
             }
@@ -222,7 +256,8 @@ public final class ScalabilitySweep {
 
     private static List<SepRow> sweepSeparation(List<Program> programs, Configuration cfg,
                                                 LogManager log, ScheduledExecutorService watchdog,
-                                                Caps caps, long start, Path outDir) throws Exception {
+                                                Caps caps, long start, Path outDir, Suite suite)
+            throws Exception {
         // Small-n first so the most cells complete before the budget is spent.
         List<Program> ordered = new ArrayList<>(programs);
         ordered.sort((a, b) -> Integer.compare(a.n(), b.n()));
@@ -274,7 +309,7 @@ public final class ScalabilitySweep {
                                 allow, forbid, status, size, sep.ms()));
                     }
                 }
-                writeSeparationCsv(outDir, rows);   // incremental: survive a hard kill
+                writeSeparationCsv(outDir, suite, rows);   // incremental: survive a hard kill
                 System.out.printf("  [sep ] %-12s n=%-2d done (elapsed %.0fs)%n",
                         prog.family(), prog.n(), (System.currentTimeMillis() - start) / 1000.0);
             } finally {
@@ -396,7 +431,7 @@ public final class ScalabilitySweep {
 
     // ── CSV output ────────────────────────────────────────────────────────
 
-    private static void writeConsistencyCsv(Path dir, List<ConsRow> rows) throws IOException {
+    private static void writeConsistencyCsv(Path dir, Suite suite, List<ConsRow> rows) throws IOException {
         StringBuilder sb = new StringBuilder(
                 "family,n,events,model,verdict,fullexec_ms,minwitness_size,minwitness_ms,used_mem_mb\n");
         for (ConsRow r : rows) {
@@ -410,10 +445,10 @@ public final class ScalabilitySweep {
               .append(r.minWitnessMs()).append(',')
               .append(r.usedMemMb()).append('\n');
         }
-        Files.writeString(dir.resolve("scalability-consistency.csv"), sb.toString());
+        Files.writeString(dir.resolve(suite.consCsv()), sb.toString());
     }
 
-    private static void writeSeparationCsv(Path dir, List<SepRow> rows) throws IOException {
+    private static void writeSeparationCsv(Path dir, Suite suite, List<SepRow> rows) throws IOException {
         StringBuilder sb = new StringBuilder(
                 "family,n,events,allowedBy,forbiddenBy,status,witnessSize,ms\n");
         for (SepRow r : rows) {
@@ -426,15 +461,15 @@ public final class ScalabilitySweep {
               .append(r.witnessSize() == null ? "" : r.witnessSize()).append(',')
               .append(r.ms()).append('\n');
         }
-        Files.writeString(dir.resolve("scalability-separation.csv"), sb.toString());
+        Files.writeString(dir.resolve(suite.sepCsv()), sb.toString());
     }
 
     // ── Console summary tables (TASK 3) ──────────────────────────────────────
 
-    private static void printConsistencyTables(List<ConsRow> rows) {
+    private static void printConsistencyTables(List<ConsRow> rows, Suite suite) {
         System.out.println();
         System.out.println("== Consistency scaling (full-execution decision time, ms) ==");
-        for (String family : FAMILIES) {
+        for (String family : suite.families()) {
             System.out.printf("%n### %s%n%n", family);
             System.out.println("| n | events | SC ms | TSO ms | PSO ms | RA ms | WEAKEST ms |");
             System.out.println("|---|--------|-------|--------|--------|-------|------------|");
@@ -531,7 +566,7 @@ public final class ScalabilitySweep {
 
     // ── Stop-trigger checks ───────────────────────────────────────────────
 
-    private static void checkStopTriggers(List<ConsRow> rows) {
+    private static void checkStopTriggers(List<ConsRow> rows, Suite suite) {
         System.out.println();
         System.out.println("== Stop-trigger checks ==");
         boolean ok = true;
@@ -551,8 +586,13 @@ public final class ScalabilitySweep {
             ok = false;
         }
 
+        // Day-12 stop-trigger: fence/RMW encoding must not blow up small (n<=4) cases.
+        if (suite.name().equals("fences")) {
+            ok &= checkFenceOverhead(rows);
+        }
+
         // Exponential-blowup flag for the paper's honest §6 discussion.
-        for (String family : FAMILIES) {
+        for (String family : suite.families()) {
             for (MemoryModel m : MODELS) {
                 if (exponentialBeyond4(rows, family, m)) {
                     System.out.printf("  ~~ FLAG (paper §6): %s/%s shows >=2.5x/step growth "
@@ -560,8 +600,50 @@ public final class ScalabilitySweep {
                 }
             }
         }
-        if (ok) System.out.println("  verdict stop-triggers clear (no LBFakeChain/WEAKEST "
-                + "FORBIDDEN; LBChain(2)/WEAKEST FORBIDDEN as required).");
+        if (ok) System.out.println("  stop-triggers clear.");
+    }
+
+    /**
+     * Day-12 stop-trigger: the fence/RMW encoding must not degrade small cases by more than
+     * 3×. For each fence/RMW family it compares the full-execution decision time to the
+     * {@code SBNThread} baseline at matching {@code n ∈ {2,3,4}} per model, flagging any
+     * ratio worse than 3× (only where the baseline clears the {@value #NOISE_FLOOR_MS}-ms
+     * noise floor, below which a ratio is dominated by timer noise and meaningless).
+     */
+    private static boolean checkFenceOverhead(List<ConsRow> rows) {
+        boolean ok = true;
+        double worst = 0;
+        String worstWhere = "none";
+        for (String family : new String[]{"SBChainMfence", "RMWChain"}) {
+            for (MemoryModel m : MODELS) {
+                for (int n : new int[]{2, 3, 4}) {
+                    ConsRow probe = find(rows, family, n, m);
+                    ConsRow base = find(rows, "SBNThread", n, m);
+                    if (probe == null || base == null) continue;
+                    if (probe.verdict() == Verdict.TIMEOUT) {
+                        System.out.printf("  !! Day-12 overhead: %s/%s n=%d TIMED OUT%n",
+                                family, m, n);
+                        ok = false;
+                        continue;
+                    }
+                    if (base.fullExecMs() < NOISE_FLOOR_MS) continue;   // ratio not meaningful
+                    double ratio = probe.fullExecMs() / (double) base.fullExecMs();
+                    if (ratio > worst) {
+                        worst = ratio;
+                        worstWhere = family + "/" + m + " n=" + n;
+                    }
+                    if (ratio > 3.0) {
+                        System.out.printf("  !! Day-12 overhead: %s/%s n=%d = %.1fx baseline "
+                                + "(>3x: %dms vs %dms)%n",
+                                family, m, n, ratio, probe.fullExecMs(), base.fullExecMs());
+                        ok = false;
+                    }
+                }
+            }
+        }
+        System.out.printf("  fence/RMW overhead vs SBNThread (n<=4): worst %.2fx (%s)%s%n",
+                worst, worstWhere, ok ? " — within 3x budget" : " — STOP TRIGGER");
+        return ok;
     }
 
     private static boolean exponentialBeyond4(List<ConsRow> rows, String family, MemoryModel m) {
@@ -591,10 +673,10 @@ public final class ScalabilitySweep {
         return true;
     }
 
-    private static void printSeparationSummary(List<SepRow> rows) {
+    private static void printSeparationSummary(List<SepRow> rows, Suite suite) {
         System.out.println();
         System.out.println("== Separation sweep summary (per family) ==");
-        for (String family : FAMILIES) {
+        for (String family : suite.families()) {
             int solved = 0, noSep = 0, timeout = 0;
             for (SepRow r : rows) {
                 if (!r.family().equals(family)) continue;

@@ -3,7 +3,9 @@ package wev.smt;
 import com.weakest.model.Event;
 import com.weakest.model.EventStructure;
 import com.weakest.model.EventType;
+import com.weakest.model.FenceEvent;
 import com.weakest.model.ReadEvent;
+import com.weakest.model.RMWEvent;
 import com.weakest.model.WriteEvent;
 import org.sosy_lab.java_smt.api.BooleanFormula;
 import org.sosy_lab.java_smt.api.BooleanFormulaManager;
@@ -76,8 +78,9 @@ public final class EventStructureEncoder {
         }
 
         for (Event r : es.getEvents()) {
-            if (!(r instanceof ReadEvent)) continue;
+            if (!isReader(r)) continue;
             for (Event w : writesSharingLocation(r.getVariable())) {
+                if (w.getId() == r.getId()) continue;   // an RMW cannot read from itself
                 EventPair k = new EventPair(w, r);
                 rfVars.put(k, bmgr.makeVariable("rf_w" + w.getId() + "_r" + r.getId()));
                 jfVars.put(k, bmgr.makeVariable("jf_w" + w.getId() + "_r" + r.getId()));
@@ -185,10 +188,12 @@ public final class EventStructureEncoder {
         cs.addAll(relaxedPoConstraints());
 
         for (Event e : es.getEvents()) {
-            if (!(e instanceof ReadEvent r)) continue;
+            if (!isReader(e)) continue;
+            int want = readValueOf(e);
             List<BooleanFormula> choices = new ArrayList<>();
-            for (Event w : writesSharingLocation(r.getVariable())) {
-                BooleanFormula rf = rfVars.get(new EventPair(w, r));
+            for (Event w : writesSharingLocation(e.getVariable())) {
+                if (w.getId() == e.getId()) continue;   // an RMW cannot read from itself
+                BooleanFormula rf = rfVars.get(new EventPair(w, e));
                 if (rf == null) continue;
                 choices.add(rf);
                 // Pass 3 Stage 2: the global rf-forward edge (rf ⇒ pos(w) < pos(r))
@@ -198,8 +203,9 @@ public final class EventStructureEncoder {
                 // Per-location read-after-write is re-imposed for every model by
                 // AxiomaticConsistency.coherencePerLocation (addRfLoc); SC/TSO/PSO
                 // re-impose the global rf ordering in their own acyclic layers (addRf).
-                cs.add(bmgr.implication(rf,
-                        bmgr.makeBoolean(w.getValue() == r.getValue())));
+                // For an RMW the read side consumes its oldVal (readValueOf), not the
+                // value it writes.
+                cs.add(bmgr.implication(rf, bmgr.makeBoolean(w.getValue() == want)));
             }
             if (choices.isEmpty()) {
                 cs.add(bmgr.makeBoolean(false));
@@ -292,6 +298,13 @@ public final class EventStructureEncoder {
             for (Integer toId : entry.getValue()) {
                 Event b = es.getEventById(toId);
                 if (b == null) continue;
+                // A fence carries no co/rf, so its slot in the global witness order is
+                // irrelevant; ordering an access to/from it would re-impose, through the
+                // back door, the very cross-location W→W / W→R the relaxation drops (a
+                // fence between two writes is not itself a write, so droppedCrossLocation
+                // misses it). Per-model fence ordering lives entirely in the layer
+                // encoding (AxiomaticConsistency.addPo); here we simply skip fence edges.
+                if (a instanceof FenceEvent || b instanceof FenceEvent) continue;
                 if (droppedCrossLocation(a, b)) continue;
                 cs.add(imgr.lessThan(posA, eventVars.get(b)));
             }
@@ -324,15 +337,26 @@ public final class EventStructureEncoder {
     private List<BooleanFormula> jfImplications() {
         List<BooleanFormula> cs = new ArrayList<>();
         for (Event e : es.getEvents()) {
-            if (!(e instanceof ReadEvent r)) continue;
-            for (Event w : writesSharingLocation(r.getVariable())) {
-                BooleanFormula jf = jfVars.get(new EventPair(w, r));
+            if (!isReader(e)) continue;
+            int want = readValueOf(e);
+            for (Event w : writesSharingLocation(e.getVariable())) {
+                if (w.getId() == e.getId()) continue;
+                BooleanFormula jf = jfVars.get(new EventPair(w, e));
                 if (jf == null) continue;
-                cs.add(bmgr.implication(jf,
-                        bmgr.makeBoolean(w.getValue() == r.getValue())));
+                cs.add(bmgr.implication(jf, bmgr.makeBoolean(w.getValue() == want)));
             }
         }
         return cs;
+    }
+
+    /** A reader is a plain load or the read side of an RMW. */
+    static boolean isReader(Event e) {
+        return e instanceof ReadEvent || e instanceof RMWEvent;
+    }
+
+    /** The value a reader consumes: an RMW reads its oldVal; a plain read its value. */
+    static int readValueOf(Event e) {
+        return (e instanceof RMWEvent rmw) ? rmw.getReadValue() : e.getValue();
     }
 
     private List<BooleanFormula> ewConstraints() {

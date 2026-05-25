@@ -2,8 +2,10 @@ package wev.smt;
 
 import com.weakest.model.Event;
 import com.weakest.model.EventStructure;
+import com.weakest.model.FenceEvent;
 import com.weakest.model.MemoryOrder;
 import com.weakest.model.ReadEvent;
+import com.weakest.model.RMWEvent;
 import com.weakest.model.WriteEvent;
 
 import java.nio.file.Path;
@@ -150,6 +152,32 @@ public final class LitmusCorpus {
         cs.add(c("3.LBdep-fake", lb3Fake.es(), exp(F, F, F, A, A), lb3Fake.deps()));
         EsDeps lb3Real = lb3WithDeps(DependencyInfo::addDataDep);
         cs.add(c("3.LBdep-real", lb3Real.es(), exp(F, F, F, A, F), lb3Real.deps()));
+
+        // ── Day 12: fence + RMW litmus tests ──────────────────────────────────
+        // Fences restore the orderings a model relaxes; a strongly-ordered (locked) RMW
+        // drains program order like a full fence; RMW atomicity forbids a co-intervening
+        // write. Verdicts are *this* model's. Note the RA layer is the release/acquire
+        // fragment (Lahav et al. PLDI'17), NOT full RC11: it has no seq_cst-fence total
+        // order, so a full fence merely sitting between a store and a load is invisible to
+        // it — hence SB+mfences / 2+2W+sync / IRIW+sync stay RA-ALLOWED, exactly as the
+        // unsynchronised tests, while the SC/TSO/PSO ppo layers do see the restored order.
+        cs.add(c("SB+mfences",   buildSBmfences(),    exp(F, F, F, A, A)));  // FULL fence restores W→R for SC/TSO/PSO
+        cs.add(c("2+2W+sync",    build2plus2Wsync(),  exp(F, F, F, A, A)));  // FULL fence restores W→W ⇒ PSO now forbids
+        cs.add(c("IRIW+sync",    buildIRIWsync(),     exp(F, F, F, A, A)));  // read-fence: no new forbidding (RA needs writer release)
+        cs.add(c("RMW-as-fence", buildRmwAsFence(),   exp(F, F, F, A, A)));  // locked RMW between store/load = full fence
+        cs.add(c("SB+rmw",       buildSBrmw(),        exp(F, F, F, A, A)));  // SB's stores are locked RMWs ⇒ buffer drained
+        // Release/acquire synchronisation built purely from fences. lwsync(REL) before the
+        // flag store + isync(ACQ) after the flag load make the relacq pairing, so PSO/RA
+        // forbid MP; the ACQ_REL fences in LB upgrade both rf edges to sw, closing the LB
+        // cycle in hb under RA (a new FFFFA RA-vs-WEAKEST separator) while WEAKEST — which
+        // ignores fences, reasoning only by jf-coherence — still allows the dependency-free
+        // cycle.
+        cs.add(c("MP+lwsync",    buildMPlwsync(),     exp(F, F, F, F, A)));  // fence-built release/acquire MP
+        cs.add(c("LB+ctrlfence", buildLBctrlFence(),  exp(F, F, F, F, A)));  // ACQ_REL fences ⇒ RA forbids, WEAKEST allows
+        // RMW atomicity: two CASes that both read the initial value cannot both "succeed"
+        // — one is co-between the init and the other, which atomicity (and per-location
+        // coherence) forbid under every model.
+        cs.add(c("CAS-pair",     buildCASpair(),      exp(F, F, F, F, F)));  // atomicity: no two RMWs read the same prior write
 
         return cs;
     }
@@ -661,6 +689,179 @@ public final class LitmusCorpus {
     @FunctionalInterface
     private interface DepEdge {
         void add(DependencyInfo deps, Event consumer, Event producer);
+    }
+
+    // ── Day 12 fence / RMW builders ──────────────────────────────────────────
+
+    private static FenceEvent fence(int thread, FenceEvent.FenceKind kind) {
+        return new FenceEvent(thread, kind);
+    }
+
+    /** A strongly-ordered (full-fence) RMW reading {@code oldV}, writing {@code newV}. */
+    private static RMWEvent rmw(int thread, String var, MemoryOrder mo, int oldV, int newV) {
+        return new RMWEvent(thread, var, mo, oldV, newV);
+    }
+
+    /** SB with a FULL fence between each thread's store and load (x86 SB+mfences). */
+    private static EventStructure buildSBmfences() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = w(0, "x", RLX, 0);
+        WriteEvent iy = w(0, "y", RLX, 0);
+        WriteEvent wx = w(1, "x", RLX, 1);
+        FenceEvent f1 = fence(1, FenceEvent.FenceKind.FULL);
+        ReadEvent r1 = r(1, "y", RLX, "r1");
+        WriteEvent wy = w(2, "y", RLX, 1);
+        FenceEvent f2 = fence(2, FenceEvent.FenceKind.FULL);
+        ReadEvent r2 = r(2, "x", RLX, "r2");
+        add(es, ix, iy, wx, f1, r1, wy, f2, r2);
+        es.addProgramOrder(wx, f1); es.addProgramOrder(f1, r1);
+        es.addProgramOrder(wy, f2); es.addProgramOrder(f2, r2);
+        co(es, "x", ix, wx);
+        co(es, "y", iy, wy);
+        es.addReadsFrom(r1, iy);
+        es.addReadsFrom(r2, ix);
+        return es;
+    }
+
+    /** 2+2W with a FULL fence between each thread's two writes (restores W→W for PSO). */
+    private static EventStructure build2plus2Wsync() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = w(0, "x", RLX, 0);
+        WriteEvent iy = w(0, "y", RLX, 0);
+        WriteEvent wx1 = w(1, "x", RLX, 1);
+        FenceEvent f1 = fence(1, FenceEvent.FenceKind.FULL);
+        WriteEvent wy1 = w(1, "y", RLX, 1);
+        WriteEvent wy2 = w(2, "y", RLX, 2);
+        FenceEvent f2 = fence(2, FenceEvent.FenceKind.FULL);
+        WriteEvent wx2 = w(2, "x", RLX, 2);
+        add(es, ix, iy, wx1, f1, wy1, wy2, f2, wx2);
+        es.addProgramOrder(wx1, f1); es.addProgramOrder(f1, wy1);
+        es.addProgramOrder(wy2, f2); es.addProgramOrder(f2, wx2);
+        co(es, "x", ix, wx2, wx1);   // x final = 1
+        co(es, "y", iy, wy1, wy2);   // y final = 2
+        return es;
+    }
+
+    /** IRIW with a FULL fence between the two reads on each reader thread. */
+    private static EventStructure buildIRIWsync() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = w(0, "x", RLX, 0);
+        WriteEvent iy = w(0, "y", RLX, 0);
+        WriteEvent w1 = w(1, "x", RLX, 1);
+        WriteEvent w2 = w(2, "y", RLX, 1);
+        ReadEvent r1 = r(3, "x", RLX, "r1");
+        FenceEvent f3 = fence(3, FenceEvent.FenceKind.FULL);
+        ReadEvent r2 = r(3, "y", RLX, "r2");
+        ReadEvent r3 = r(4, "y", RLX, "r3");
+        FenceEvent f4 = fence(4, FenceEvent.FenceKind.FULL);
+        ReadEvent r4 = r(4, "x", RLX, "r4");
+        add(es, ix, iy, w1, w2, r1, f3, r2, r3, f4, r4);
+        es.addProgramOrder(r1, f3); es.addProgramOrder(f3, r2);
+        es.addProgramOrder(r3, f4); es.addProgramOrder(f4, r4);
+        co(es, "x", ix, w1);
+        co(es, "y", iy, w2);
+        es.addReadsFrom(r1, w1);   // T3: x=1 then y=0
+        es.addReadsFrom(r2, iy);
+        es.addReadsFrom(r3, w2);   // T4: y=1 then x=0
+        es.addReadsFrom(r4, ix);
+        return es;
+    }
+
+    /** SB with a locked RMW (full fence) on a scratch location between store and load. */
+    private static EventStructure buildRmwAsFence() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = w(0, "x", RLX, 0);
+        WriteEvent iy = w(0, "y", RLX, 0);
+        WriteEvent is1 = w(0, "s1", RLX, 0);
+        WriteEvent is2 = w(0, "s2", RLX, 0);
+        WriteEvent wx = w(1, "x", RLX, 1);
+        RMWEvent u1 = rmw(1, "s1", SC, 0, 1);
+        ReadEvent r1 = r(1, "y", RLX, "r1");
+        WriteEvent wy = w(2, "y", RLX, 1);
+        RMWEvent u2 = rmw(2, "s2", SC, 0, 1);
+        ReadEvent r2 = r(2, "x", RLX, "r2");
+        add(es, ix, iy, is1, is2, wx, u1, r1, wy, u2, r2);
+        es.addProgramOrder(wx, u1); es.addProgramOrder(u1, r1);
+        es.addProgramOrder(wy, u2); es.addProgramOrder(u2, r2);
+        co(es, "x", ix, wx);
+        co(es, "y", iy, wy);
+        co(es, "s1", is1, u1);
+        co(es, "s2", is2, u2);
+        es.addReadsFrom(r1, iy);
+        es.addReadsFrom(r2, ix);
+        return es;
+    }
+
+    /** SB whose stores are atomic RMWs (xchg): the lock drains the store buffer. */
+    private static EventStructure buildSBrmw() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = w(0, "x", RLX, 0);
+        WriteEvent iy = w(0, "y", RLX, 0);
+        RMWEvent u1 = rmw(1, "x", SC, 0, 1);
+        ReadEvent r1 = r(1, "y", RLX, "r1");
+        RMWEvent u2 = rmw(2, "y", SC, 0, 1);
+        ReadEvent r2 = r(2, "x", RLX, "r2");
+        add(es, ix, iy, u1, r1, u2, r2);
+        es.addProgramOrder(u1, r1);
+        es.addProgramOrder(u2, r2);
+        co(es, "x", ix, u1);
+        co(es, "y", iy, u2);
+        es.addReadsFrom(r1, iy);   // both reads miss the other thread's RMW write
+        es.addReadsFrom(r2, ix);
+        return es;
+    }
+
+    /** MP with PPC-style fences: lwsync(REL) before the flag store, isync(ACQ) after the flag load. */
+    private static EventStructure buildMPlwsync() {
+        EventStructure es = new EventStructure();
+        WriteEvent idata = w(0, "data", RLX, 0);
+        WriteEvent iflag = w(0, "flag", RLX, 0);
+        WriteEvent wdata = w(1, "data", RLX, 1);
+        FenceEvent frel = fence(1, FenceEvent.FenceKind.REL);
+        WriteEvent wflag = w(1, "flag", RLX, 1);
+        ReadEvent rflag = r(2, "flag", RLX, "r1");
+        FenceEvent facq = fence(2, FenceEvent.FenceKind.ACQ);
+        ReadEvent rdata = r(2, "data", RLX, "r2");
+        add(es, idata, iflag, wdata, frel, wflag, rflag, facq, rdata);
+        es.addProgramOrder(wdata, frel); es.addProgramOrder(frel, wflag);
+        es.addProgramOrder(rflag, facq); es.addProgramOrder(facq, rdata);
+        co(es, "data", idata, wdata);
+        co(es, "flag", iflag, wflag);
+        es.addReadsFrom(rflag, wflag);   // sees flag = 1
+        es.addReadsFrom(rdata, idata);   // but data = 0
+        return es;
+    }
+
+    /** LB with an ACQ_REL fence between each thread's read and write (upgrades both to sw). */
+    private static EventStructure buildLBctrlFence() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = w(0, "x", RLX, 0);
+        WriteEvent iy = w(0, "y", RLX, 0);
+        ReadEvent r1 = r(1, "x", RLX, "r1");
+        FenceEvent f1 = fence(1, FenceEvent.FenceKind.ACQ_REL);
+        WriteEvent wy = w(1, "y", RLX, 1);
+        ReadEvent r2 = r(2, "y", RLX, "r2");
+        FenceEvent f2 = fence(2, FenceEvent.FenceKind.ACQ_REL);
+        WriteEvent wx = w(2, "x", RLX, 1);
+        add(es, ix, iy, r1, f1, wy, r2, f2, wx);
+        es.addProgramOrder(r1, f1); es.addProgramOrder(f1, wy);
+        es.addProgramOrder(r2, f2); es.addProgramOrder(f2, wx);
+        co(es, "x", ix, wx);
+        co(es, "y", iy, wy);
+        es.addReadsFrom(r1, wx);   // the load-buffering "future read"
+        es.addReadsFrom(r2, wy);
+        return es;
+    }
+
+    /** A compare-and-swap pair: two RMWs on x that both read the initial value. */
+    private static EventStructure buildCASpair() {
+        EventStructure es = new EventStructure();
+        WriteEvent ix = w(0, "x", RLX, 0);
+        RMWEvent u1 = rmw(1, "x", SC, 0, 1);   // reads 0 → writes 1
+        RMWEvent u2 = rmw(2, "x", SC, 0, 2);   // reads 0 → writes 2
+        add(es, ix, u1, u2);
+        co(es, "x", ix, u1, u2);   // u1 wedged between the init and u2 — atomicity violation
+        return es;
     }
 
     // ── Small varargs helpers ──────────────────────────────────────────────

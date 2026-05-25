@@ -1,7 +1,10 @@
 package wev.smt.bench;
 
 import com.weakest.model.EventStructure;
+import com.weakest.model.FenceEvent;
+import com.weakest.model.FenceEvent.FenceKind;
 import com.weakest.model.MemoryOrder;
+import com.weakest.model.RMWEvent;
 import com.weakest.model.ReadEvent;
 import com.weakest.model.WriteEvent;
 
@@ -227,6 +230,97 @@ public final class ParametricPrograms {
         }
 
         return new Program("IRIWFan", n, es, DependencyInfo.empty());
+    }
+
+    // ── Store-buffering ring with full fences (Day 12) ───────────────────────
+
+    /**
+     * The {@link #buildSBNThread} ring with an x86 {@code MFENCE} (a {@link FenceKind#FULL}
+     * {@link FenceEvent}) interposed between each thread's write and its read. At
+     * {@code n = 2} this is the corpus {@code SB+mfences}. The fence restores the
+     * {@code W→R} order that TSO/PSO otherwise relax, so the all-reads-see-0 outcome — which
+     * plain {@link #buildSBNThread} permits under TSO/PSO — is forbidden under SC/TSO/PSO
+     * here (it stays allowed under RA/WEAKEST, which have no seq-cst total order: the
+     * verdict vector matches the corpus {@code SB+mfences} = {@code FFFAA}).
+     *
+     * <p>This is the fence-encoding scalability probe: it is shape-identical to
+     * {@link #buildSBNThread} plus {@code n} fence events ({@code 4n} events vs. {@code 3n}),
+     * so the consistency-sweep ratio against {@code SBNThread} at matching {@code n} isolates
+     * the cost the fence machinery (extra layer var + ppo-restore constraints) adds.
+     */
+    public static Program buildSBChainMfence(int n) {
+        requireChain(n);
+        EventStructure es = new EventStructure();
+
+        WriteEvent[] init = new WriteEvent[n];
+        for (int j = 0; j < n; j++) {
+            init[j] = w(0, "x" + j, 0);
+            es.addEvent(init[j]);
+        }
+
+        WriteEvent[] wr = new WriteEvent[n];
+        ReadEvent[] rd = new ReadEvent[n];
+        for (int p = 0; p < n; p++) {
+            int thread = p + 1;
+            wr[p] = w(thread, "x" + p, 1);                       // writes own x_p
+            FenceEvent mfence = new FenceEvent(thread, FenceKind.FULL);
+            rd[p] = r(thread, "x" + ((p + 1) % n), "r" + p);     // reads neighbour x_{p+1}
+            es.addEvent(wr[p]);
+            es.addEvent(mfence);
+            es.addEvent(rd[p]);
+            es.addProgramOrder(wr[p], mfence);                   // write →po fence
+            es.addProgramOrder(mfence, rd[p]);                   // fence →po read
+        }
+
+        // rf: each read sees the initial 0 of the neighbour's location (misses the write).
+        for (int p = 0; p < n; p++) {
+            es.addReadsFrom(rd[p], init[(p + 1) % n]);
+        }
+        // co per location: init_p < own write to x_p.
+        for (int p = 0; p < n; p++) {
+            es.addCoherenceOrder("x" + p, init[p]);
+            es.addCoherenceOrder("x" + p, wr[p]);
+        }
+
+        return new Program("SBChainMfence", n, es, DependencyInfo.empty());
+    }
+
+    // ── Atomic-increment RMW chain (Day 12) ──────────────────────────────────
+
+    /**
+     * An {@code n}-thread atomic-increment chain on a single shared location {@code x}:
+     * thread {@code p} performs a strongly-ordered ({@code LOCK}/seq-cst) {@link RMWEvent}
+     * that reads {@code p} and writes {@code p+1}, with {@code u_0} reading the initial
+     * {@code 0} and {@code u_p} reading {@code u_{p-1}}. Coherence chains the writes
+     * {@code init < u_0 < … < u_{n-1}}; RMW atomicity forbids any write from slipping
+     * between an RMW's read and its own write, so the increments serialise — the canonical
+     * atomic counter, consistent (allowed) under all five models.
+     *
+     * <p>This is the RMW-encoding scalability probe. Only {@code n+1} events (one init,
+     * {@code n} RMWs), but the {@code rmwAtomicity} axiom adds an {@code O(n²)}
+     * (RMWs × writes-to-{@code x}) pairwise check, so the consistency-sweep curve tracks
+     * the atomicity encoding's cost as the write fan-in on one location grows.
+     */
+    public static Program buildRMWChain(int n) {
+        requireChain(n);
+        EventStructure es = new EventStructure();
+
+        WriteEvent init = w(0, "x", 0);
+        es.addEvent(init);
+        es.addCoherenceOrder("x", init);
+
+        for (int p = 0; p < n; p++) {
+            int thread = p + 1;
+            RMWEvent u = new RMWEvent(thread, "x", RLX, p, p + 1);   // reads p, writes p+1 (full-fence)
+            es.addEvent(u);
+            es.addCoherenceOrder("x", u);                           // co: init < u_0 < … < u_{n-1}
+        }
+
+        // No rf is wired: an RMW's read source is searched by the encoder, pinned by the
+        // well-formedness value match. The values are unique (u_p reads p, u_{p-1} writes p),
+        // so the only consistent assignment is the increment chain u_0←init, u_p←u_{p-1}, and
+        // RMW atomicity holds because each producer sits co-immediately-before its consumer.
+        return new Program("RMWChain", n, es, DependencyInfo.empty());
     }
 
     private static void requireChain(int n) {

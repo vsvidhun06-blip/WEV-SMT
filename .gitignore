@@ -29,3 +29,12 @@ hs_err_pid*
 
 # ── VS Code ───────────────────────────────────────────
 .vscode/
+
+# ── Eval debug traces (throwaway sweep/corpus stdout logs) ─
+wev-smt/eval/logs/
+
+# ── AtlasReconstruct generated CSVs (regenerable; the committed record is
+#    eval/atlas-day12-final.txt, the run's captured stdout) ─
+wev-smt/consistency-validation.csv
+wev-smt/atlas-separations.csv
+wev-smt/mismatches.txt

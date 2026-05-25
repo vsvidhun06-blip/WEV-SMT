@@ -2,8 +2,10 @@ package wev.smt.parse;
 
 import com.weakest.model.Event;
 import com.weakest.model.EventStructure;
+import com.weakest.model.FenceEvent;
 import com.weakest.model.MemoryOrder;
 import com.weakest.model.ReadEvent;
+import com.weakest.model.RMWEvent;
 import com.weakest.model.WriteEvent;
 
 import wev.smt.DependencyInfo;
@@ -45,10 +47,10 @@ import java.util.regex.Pattern;
  * Architectural instructions map onto the WEV event vocabulary, which has only
  * {@code READ}/{@code WRITE} accesses with a {@link MemoryOrder}. Loads become
  * {@link ReadEvent}s, stores {@link WriteEvent}s; release/acquire variants set the
- * order; fences are recognised but — the model has no fence event — are <em>not</em>
- * encoded (a documented limitation, see {@code docs/litmus-parser-coverage.md}); a
- * read-modify-write is decomposed into a po-linked read→write pair with a data
- * dependency (atomicity not separately enforced). Anything outside this subset makes
+ * order. As of Day 12, fences become {@link FenceEvent}s (kind mapped from the mnemonic
+ * / memory order) and a read-modify-write becomes a single atomic {@link RMWEvent}
+ * (read+write at one event id; x86 LOCK / seq_cst forms order like a full fence); the
+ * consistency layer encodes both. Anything outside this subset makes
  * the file {@linkplain ParseException.Kind#UNSUPPORTED_INSTRUCTION skipped}, never fatal.
  *
  * <h2>Dependencies</h2>
@@ -545,7 +547,13 @@ public final class LitmusParser {
             for (RawInstr ri : rawInstrs) {
                 Insn in = lex(ri);
                 switch (in.kind()) {
-                    case NOP, FENCE -> { /* no event in the WEV model */ }
+                    case NOP -> { /* no event in the WEV model */ }
+                    case FENCE -> {
+                        // Day 12: fences are now encoded (FenceEvent), in program order.
+                        FenceEvent f = new FenceEvent(threadId, fenceKind(in));
+                        es.addEvent(f);
+                        prevMem = link(prevMem, f);
+                    }
                     case IMM -> regEnv.put(in.reg(), RegSrc.constant(parseIntLit(in.expr())));
                     case ASSIGN -> regEnv.put(in.reg(), deriveReg(in.expr(), regEnv));
                     case BRANCH -> ctrlReads.addAll(
@@ -574,21 +582,26 @@ public final class LitmusParser {
                         for (ReadEvent cr : ctrlReads) deps.addCtrlDep(wr, cr, true);
                     }
                     case RMW -> {
+                        // Day 12: a single atomic RMWEvent (read+write at one event id),
+                        // rather than a decomposed read→write pair. Atomicity is enforced
+                        // by AxiomaticConsistency.rmwAtomicity, so no synthetic data dep is
+                        // needed. The candidate read consumes the location's initial value;
+                        // the write produces a distinct placeholder (oldVal+1). x86 LOCK-ed
+                        // and seq_cst RMWs act as a full fence in program order.
                         String loc = resolveLoc(in, addrEnv, ri);
-                        ReadEvent rd = new ReadEvent(threadId, loc, in.mo(), in.reg());
-                        es.addEvent(rd);
-                        prevMem = link(prevMem, rd);
-                        int value = in.expr() == null ? 1 : evalConst(in.expr(), regEnv);
-                        WriteEvent wr = new WriteEvent(threadId, loc, in.mo(), value, "rmw");
-                        es.addEvent(wr);
-                        prevMem = link(prevMem, wr);
-                        es.addProgramOrder(rd, wr);
+                        int oldV = initValues.getOrDefault(loc, 0);
+                        int newV = in.expr() == null ? oldV + 1 : evalConst(in.expr(), regEnv);
+                        boolean fullFence = arch == Arch.X86 || in.mo() == MemoryOrder.SC;
+                        RMWEvent u = new RMWEvent(threadId, loc, in.mo(), oldV, newV, fullFence);
+                        es.addEvent(u);
+                        prevMem = link(prevMem, u);
                         seenLocation(loc);
-                        programWrites.computeIfAbsent(loc, k -> new ArrayList<>()).add(wr);
-                        deps.addDataDep(wr, rd, true);   // value written depends on value read
+                        programWrites.computeIfAbsent(loc, k -> new ArrayList<>()).add(u);
+                        addAddrDeps(u, in, regEnv);
                         if (in.reg() != null) {
-                            regEnv.put(in.reg(), RegSrc.ofRead(rd));
-                            readByThreadReg.put(pIndex + ":" + in.reg(), rd);
+                            // No separate read event to track; the loaded value flows on as
+                            // a constant (RMW-carried dependencies are not modelled).
+                            regEnv.put(in.reg(), RegSrc.constant(oldV));
                         }
                     }
                 }
@@ -621,6 +634,47 @@ public final class LitmusParser {
                                 + "the initial state: " + ri.text());
             }
             return bound;
+        }
+
+        /**
+         * Map a parsed fence to its {@link FenceEvent.FenceKind}. C follows the parsed
+         * memory order (seq_cst / smp_mb ⇒ FULL, acquire ⇒ ACQ, release ⇒ REL); assembly
+         * maps the mnemonic and barrier domain: full barriers ⇒ FULL, load/acquire/
+         * instruction-sync barriers ⇒ ACQ, store/release barriers ⇒ REL.
+         */
+        private FenceEvent.FenceKind fenceKind(Insn in) {
+            if (arch == Arch.C) {
+                return switch (in.mo()) {
+                    case ACQUIRE -> FenceEvent.FenceKind.ACQ;
+                    case RELEASE -> FenceEvent.FenceKind.REL;
+                    default -> FenceEvent.FenceKind.FULL;     // SC / seq_cst / smp_mb
+                };
+            }
+            String raw = in.raw().strip().toLowerCase(Locale.ROOT);
+            String op = raw.split("[\\s,]+", 2)[0];
+            String operand = raw.contains(" ")
+                    ? raw.substring(raw.indexOf(' ') + 1).replaceAll("\\s", "") : "";
+            // store-ordering / release barriers
+            if (op.equals("sfence") || op.equals("lwsync") || op.equals("eieio")) {
+                return FenceEvent.FenceKind.REL;
+            }
+            // load-ordering / acquire / instruction-sync barriers
+            if (op.equals("lfence") || op.equals("isync") || op.equals("isb")) {
+                return FenceEvent.FenceKind.ACQ;
+            }
+            // ARM dmb/dsb domains: …ld ⇒ acquire, …st ⇒ release, sy/ish ⇒ full.
+            if (op.equals("dmb") || op.equals("dsb")) {
+                if (operand.endsWith("ld")) return FenceEvent.FenceKind.ACQ;
+                if (operand.endsWith("st")) return FenceEvent.FenceKind.REL;
+                return FenceEvent.FenceKind.FULL;
+            }
+            // RISC-V FENCE pred,succ sets: r,r ⇒ acquire-ish; w,w ⇒ release-ish.
+            if (op.equals("fence")) {
+                if (operand.equals("r,r")) return FenceEvent.FenceKind.ACQ;
+                if (operand.equals("w,w")) return FenceEvent.FenceKind.REL;
+                return FenceEvent.FenceKind.FULL;             // rw,rw / fence.i
+            }
+            return FenceEvent.FenceKind.FULL;                 // mfence, sync, hwsync, dmb ish
         }
 
         // ── Dependency detection ──────────────────────────────────────────────────

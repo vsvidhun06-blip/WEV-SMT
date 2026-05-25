@@ -3,8 +3,10 @@ package wev.smt;
 import com.weakest.model.Event;
 import com.weakest.model.EventStructure;
 import com.weakest.model.EventType;
+import com.weakest.model.FenceEvent;
 import com.weakest.model.MemoryOrder;
 import com.weakest.model.ReadEvent;
+import com.weakest.model.RMWEvent;
 import com.weakest.model.WriteEvent;
 import org.sosy_lab.java_smt.api.BooleanFormula;
 import org.sosy_lab.java_smt.api.BooleanFormulaManager;
@@ -100,6 +102,7 @@ public final class AxiomaticConsistency {
         addCo(cs, layer, active);
         addFr(cs, layer, active);
         cs.add(coherencePerLocation(active));
+        cs.add(rmwAtomicity(active));
         return bmgr.and(cs);
     }
 
@@ -111,6 +114,7 @@ public final class AxiomaticConsistency {
         addCo(cs, layer, active);
         addFr(cs, layer, active);
         cs.add(coherencePerLocation(active));
+        cs.add(rmwAtomicity(active));
         return bmgr.and(cs);
     }
 
@@ -122,6 +126,7 @@ public final class AxiomaticConsistency {
         addCo(cs, layer, active);
         addFr(cs, layer, active);
         cs.add(coherencePerLocation(active));
+        cs.add(rmwAtomicity(active));
         // Release/acquire fence ordering the ppo layer misses (Pass 2c): a release
         // store read by an acquire load synchronises, ordering the prior store. The
         // sw edge enters hb, so CO-MP / MP-relacq become hb;eco (one eco segment) and
@@ -136,6 +141,7 @@ public final class AxiomaticConsistency {
         // Per-location coherence is subsumed by irreflexive(hb;eco?) but kept as a
         // cheap, independent safety net (and shared with the other models).
         cs.add(coherencePerLocation(active));
+        cs.add(rmwAtomicity(active));
         return bmgr.and(cs);
     }
 
@@ -173,6 +179,7 @@ public final class AxiomaticConsistency {
         }
         cs.add(coherencePerLocation(active));
         cs.add(jfCoherence(active));
+        cs.add(rmwAtomicity(active));
         return bmgr.and(cs);
     }
 
@@ -431,6 +438,9 @@ public final class AxiomaticConsistency {
             for (Map.Entry<EventPair, BooleanFormula> co : enc.getCoVars().entrySet()) {
                 if (co.getKey().from().getId() != w.getId()) continue;
                 Event wp = co.getKey().to();
+                // An RMW reads from the write co-before its own write part; that does not
+                // make fr point the RMW at itself (a no-op for plain reads, never writes).
+                if (wp.getId() == r.getId()) continue;
                 cs.add(bmgr.implication(
                         bmgr.and(List.of(rf.getValue(), co.getValue(),
                                 active.apply(w), active.apply(r), active.apply(wp))),
@@ -441,21 +451,141 @@ public final class AxiomaticConsistency {
 
     // ── Relation-to-layer helpers ─────────────────────────────────────────
 
+    /**
+     * Preserved-program-order edges for a model layer, <em>fence-transparent</em>. The
+     * relation is built over <em>consecutive accesses</em> (a load/store/RMW and the
+     * next access reachable in program order, skipping over intervening fence nodes,
+     * which carry no layer of their own). {@code skipWriteRead}/{@code skipWriteWrite}
+     * drop the same W→R (TSO) and W→W (PSO) pairs as before, <em>unless</em> the pair is
+     * restored by a fence between them or by an RMW endpoint (Day 12):
+     * <ul>
+     *   <li>a {@link FenceEvent} between {@code a} and {@code b} restores the ordering
+     *       iff its {@link FenceEvent.FenceKind} orders the {@code (type a → type b)}
+     *       direction ({@link #fenceOrders});</li>
+     *   <li>a strongly-ordered RMW ({@link RMWEvent#isFullFence()}) at either endpoint
+     *       drains program order like a {@code FULL} fence, so the pair is always
+     *       restored — transitively chaining a store before the RMW ahead of a load
+     *       after it (x86 {@code LOCK XCHG} acts as a full fence).</li>
+     * </ul>
+     * With no fences and no RMWs this reduces <em>exactly</em> to the previous adjacent
+     * po-edge encoding (each access's only onward access is its immediate po-successor),
+     * so every fence-free case is unchanged. Fences themselves are anchored only in the
+     * global {@code pos} well-formedness order, never given a model layer (no edges ⇒
+     * they can neither create nor break a cycle). Cf. Alglave, Maranget &amp;
+     * Tautschnig, "Herding Cats" (TOPLAS 2014) §4 for per-architecture fence semantics.
+     */
     private void addPo(List<BooleanFormula> cs, Map<Event, IntegerFormula> layer,
                        boolean skipWriteRead, boolean skipWriteWrite,
                        Function<Event, BooleanFormula> active) {
-        for (Map.Entry<Integer, List<Integer>> entry : es.getProgramOrder().entrySet()) {
-            Event a = es.getEventById(entry.getKey());
-            if (a == null) continue;
-            for (Integer toId : entry.getValue()) {
-                Event b = es.getEventById(toId);
-                if (b == null) continue;
-                if (skipWriteRead && isWriteOrInit(a) && b instanceof ReadEvent) continue;
-                if (skipWriteWrite && isWriteOrInit(a) && isWriteOrInit(b)) continue;
+        for (Event a : es.getEvents()) {
+            if (!accesses(a)) continue;                  // anchor at accesses; skip fences
+            for (AccessHop hop : nextAccessHops(a)) {
+                Event b = hop.access();
+                boolean relaxed = (skipWriteRead && isWriteOrInit(a) && b instanceof ReadEvent)
+                        || (skipWriteWrite && isWriteOrInit(a) && isWriteOrInit(b));
+                if (relaxed && !restoresOrder(a, b, hop.crossed())) continue;
                 cs.add(bmgr.implication(both(active, a, b),
                         imgr.lessThan(layer.get(a), layer.get(b))));
             }
         }
+    }
+
+    /** A next-access reachable from an anchor, with the fences crossed to reach it. */
+    private record AccessHop(Event access, List<FenceEvent> crossed) { }
+
+    /**
+     * The accesses immediately reachable from {@code a} in program order, skipping over
+     * (and collecting) any fence nodes on the way. One entry per onward branch; for the
+     * straight-line litmus threads this is a single next access.
+     */
+    private List<AccessHop> nextAccessHops(Event a) {
+        record Frame(int id, List<FenceEvent> crossed) { }
+        List<AccessHop> out = new ArrayList<>();
+        Map<Integer, List<Integer>> po = es.getProgramOrder();
+        Deque<Frame> stack = new ArrayDeque<>();
+        for (Integer s : po.getOrDefault(a.getId(), List.of())) {
+            stack.push(new Frame(s, List.of()));
+        }
+        Set<Integer> seen = new HashSet<>();
+        while (!stack.isEmpty()) {
+            Frame f = stack.pop();
+            if (!seen.add(f.id())) continue;
+            Event e = es.getEventById(f.id());
+            if (e == null) continue;
+            if (e instanceof FenceEvent fe) {
+                List<FenceEvent> nc = new ArrayList<>(f.crossed());
+                nc.add(fe);
+                for (Integer s : po.getOrDefault(f.id(), List.of())) {
+                    stack.push(new Frame(s, nc));
+                }
+            } else {
+                out.add(new AccessHop(e, f.crossed()));   // an access ends the hop
+            }
+        }
+        return out;
+    }
+
+    /** Whether a relaxed (a → b) pair is re-ordered back by a crossed fence or RMW. */
+    private boolean restoresOrder(Event a, Event b, List<FenceEvent> crossed) {
+        if (actsAsFullFence(a) || actsAsFullFence(b)) return true;
+        for (FenceEvent f : crossed) {
+            if (fenceOrders(f, a, b)) return true;
+        }
+        return false;
+    }
+
+    /** A strongly-ordered RMW (or a FULL fence) drains program order like a full fence. */
+    private boolean actsAsFullFence(Event e) {
+        return (e instanceof RMWEvent rmw && rmw.isFullFence())
+                || (e instanceof FenceEvent f && f.getKind() == FenceEvent.FenceKind.FULL);
+    }
+
+    /**
+     * Whether fence {@code f}, sitting in program order between {@code a} and {@code b},
+     * orders that pair. FULL orders everything; ACQ orders reads-before → anything-after;
+     * REL orders anything-before → writes-after; ACQ_REL is their union (R→* ∪ *→W),
+     * which notably does <em>not</em> include W→R.
+     */
+    private boolean fenceOrders(FenceEvent f, Event a, Event b) {
+        boolean aReadish = isReadish(a);
+        boolean bWriteish = isWriteOrInit(b);   // RMW is a WriteEvent, so counts as a write
+        return switch (f.getKind()) {
+            case FULL -> true;
+            case ACQ -> aReadish;
+            case REL -> bWriteish;
+            case ACQ_REL -> aReadish || bWriteish;
+        };
+    }
+
+    private boolean isReadish(Event e) {
+        return e instanceof ReadEvent || e instanceof RMWEvent;
+    }
+
+    /**
+     * RMW atomicity (Lahav &amp; Vafeiadis, PLDI 2017, §3): no write to the location may
+     * sit, in coherence order, between the write an RMW reads from and the RMW itself —
+     * {@code irreflexive(rf ; co)} restricted to RMW reads. Enforced by every model.
+     * (Because the RMW's read and write share one event id, per-location coherence
+     * already forbids the intervening write; this is the explicit textbook statement.)
+     */
+    public BooleanFormula rmwAtomicity(Function<Event, BooleanFormula> active) {
+        List<BooleanFormula> cs = new ArrayList<>();
+        for (Event u : es.getEvents()) {
+            if (!(u instanceof RMWEvent)) continue;
+            for (Map.Entry<EventPair, BooleanFormula> rf : enc.getRfVars().entrySet()) {
+                if (rf.getKey().to().getId() != u.getId()) continue;
+                Event w = rf.getKey().from();
+                for (Event wpp : writesToVar(u.getVariable())) {
+                    if (wpp.getId() == w.getId() || wpp.getId() == u.getId()) continue;
+                    BooleanFormula co1 = enc.getCoVars().get(new EventPair(w, wpp));
+                    BooleanFormula co2 = enc.getCoVars().get(new EventPair(wpp, u));
+                    if (co1 == null || co2 == null) continue;
+                    cs.add(bmgr.not(bmgr.and(List.of(rf.getValue(), co1, co2,
+                            active.apply(w), active.apply(wpp), active.apply(u)))));
+                }
+            }
+        }
+        return cs.isEmpty() ? bmgr.makeTrue() : bmgr.and(cs);
     }
 
     private void addRf(List<BooleanFormula> cs, Map<Event, IntegerFormula> layer,
@@ -492,6 +622,8 @@ public final class AxiomaticConsistency {
             for (Map.Entry<EventPair, BooleanFormula> co : enc.getCoVars().entrySet()) {
                 if (co.getKey().from().getId() != w.getId()) continue;
                 Event wp = co.getKey().to();
+                // fr never relates an RMW's read to the RMW's own write (see addFrLoc).
+                if (wp.getId() == r.getId()) continue;
                 cs.add(bmgr.implication(
                         bmgr.and(List.of(rf.getValue(), co.getValue(),
                                 active.apply(w), active.apply(r), active.apply(wp))),
@@ -566,14 +698,53 @@ public final class AxiomaticConsistency {
         return e instanceof WriteEvent || e.getType() == EventType.INIT;
     }
 
+    /**
+     * Release-like: an explicit release/SC store, <em>or</em> a (relaxed) store upgraded
+     * by a release fence sitting program-order-before it in the same thread — the C/C++
+     * fence-to-release rule ({@code [F_rel]; po; [W]}). REL / ACQ_REL / FULL fences all
+     * carry the release. This feeds the {@code sw} base of {@link #irreflexiveHbEco}.
+     */
     private boolean isReleaseLike(Event e) {
         MemoryOrder mo = e.getMemoryOrder();
-        return mo == MemoryOrder.RELEASE || mo == MemoryOrder.SC;
+        if (mo == MemoryOrder.RELEASE || mo == MemoryOrder.SC) return true;
+        return isWriteOrInit(e) && hasFenceBefore(e,
+                FenceEvent.FenceKind.REL, FenceEvent.FenceKind.ACQ_REL, FenceEvent.FenceKind.FULL);
     }
 
+    /**
+     * Acquire-like: an explicit acquire/SC load, <em>or</em> a (relaxed) load upgraded by
+     * an acquire fence sitting program-order-after it in the same thread — the
+     * fence-to-acquire rule ({@code [R]; po; [F_acq]}). ACQ / ACQ_REL / FULL fences carry
+     * the acquire.
+     */
     private boolean isAcquireLike(Event e) {
         MemoryOrder mo = e.getMemoryOrder();
-        return mo == MemoryOrder.ACQUIRE || mo == MemoryOrder.SC;
+        if (mo == MemoryOrder.ACQUIRE || mo == MemoryOrder.SC) return true;
+        return isReadish(e) && hasFenceAfter(e,
+                FenceEvent.FenceKind.ACQ, FenceEvent.FenceKind.ACQ_REL, FenceEvent.FenceKind.FULL);
+    }
+
+    /** A fence of one of {@code kinds} sits program-order-before {@code e}, same thread. */
+    private boolean hasFenceBefore(Event e, FenceEvent.FenceKind... kinds) {
+        for (Event x : es.getEvents()) {
+            if (!(x instanceof FenceEvent f) || f.getThreadId() != e.getThreadId()) continue;
+            if (kindsContain(kinds, f.getKind()) && poReaches(x.getId(), e.getId())) return true;
+        }
+        return false;
+    }
+
+    /** A fence of one of {@code kinds} sits program-order-after {@code e}, same thread. */
+    private boolean hasFenceAfter(Event e, FenceEvent.FenceKind... kinds) {
+        for (Event x : es.getEvents()) {
+            if (!(x instanceof FenceEvent f) || f.getThreadId() != e.getThreadId()) continue;
+            if (kindsContain(kinds, f.getKind()) && poReaches(e.getId(), x.getId())) return true;
+        }
+        return false;
+    }
+
+    private static boolean kindsContain(FenceEvent.FenceKind[] kinds, FenceEvent.FenceKind k) {
+        for (FenceEvent.FenceKind want : kinds) if (want == k) return true;
+        return false;
     }
 
     private List<Event> writesToVar(String var) {

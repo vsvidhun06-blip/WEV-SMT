@@ -130,3 +130,47 @@ The Day-11 spec armed three halt conditions. Status:
   no-ground-truth reason; superseded by the 0/2998 hierarchy-soundness check.
 
 No encoding-soundness halt condition fired.
+
+---
+
+## Day-12 update: fence + RMW encoding (atlas regrown 150 → 190 cells)
+
+Day 12 promoted fences and read-modify-writes from parser-recognised-but-unencoded to
+**first-class events** (`FenceEvent` with kinds `FULL`/`ACQ`/`REL`/`ACQ_REL`, atomic
+`RMWEvent` with a coherence-atomicity axiom). The hand-curated `LitmusCorpus.classics()`
+grew **32 → 40** with eight fence/RMW tests, and `AtlasReconstruct` re-validated the whole
+set:
+
+**190 compared cells, 190 matched, 0 mismatched** (40 tests × 5 models, less 10
+`UNKNOWN` cells). The eight new cases and their verdict vectors `(SC TSO PSO RA WEAKEST)`:
+
+| litmus | vector | what it pins down |
+|--------|--------|-------------------|
+| `SB+mfences` | `FFFAA` | a `FULL` fence restores `W→R`, recovering SC for SC/TSO/PSO |
+| `2+2W+sync` | `FFFAA` | `FULL` fence restores `W→W` (the PSO relaxation) |
+| `IRIW+sync` | `FFFAA` | fenced independent-reads-of-independent-writes |
+| `RMW-as-fence` | `FFFAA` | a full-fence RMW drains program order like `MFENCE` |
+| `SB+rmw` | `FFFAA` | atomic (`xchg`) stores act as the SB fence |
+| `MP+lwsync` | `FFFFA` | PPC `lwsync`(REL)+`isync`(ACQ) message-passing |
+| `LB+ctrlfence` | `FFFFA` | `ACQ_REL` fences — a **new RA \| WEAKEST separator** (rarest class) |
+| `CAS-pair` | `FFFFF` | two CAS reading the same write — atomicity violation, forbidden by all |
+
+Why fences stay invisible to RA/WEAKEST (the `··A A` tails): RA orders only through
+release/acquire synchronisation, and WEAKEST forbids only genuine thin-air cycles — a
+seq-cst *fence* between a store and a load creates neither, so `SB+mfences` and friends
+remain allowed there even as SC/TSO/PSO forbid them. `MP+lwsync`/`LB+ctrlfence` add the
+`sw` edges RA needs, so RA forbids too, leaving WEAKEST the sole permitter.
+
+**Scalability (`scalability-fences.csv`).** Two new parametric families —
+`SBChainMfence(n)` (the SB ring plus an `MFENCE` per thread, `4n` events) and `RMWChain(n)`
+(an `n`-thread atomic-increment chain, `n+1` events with an `O(n²)` atomicity check) — were
+swept over `n ∈ {2..16}` × 5 models against the fenceless `SBNThread` baseline. **Fence/RMW
+overhead stays under 3× on small cases (worst 2.56× at `SBChainMfence/RA, n=4`)**, the
+Day-12 stop-trigger; curves track the baseline's shape (SC/TSO flat, PSO/RA polynomial,
+WEAKEST near-linear), no exponential blow-up. The Day-9 sweep CSVs are untouched.
+
+The full atlas run output is committed as [`atlas-day12-final.txt`](atlas-day12-final.txt).
+The earlier RISC-V lexicon note above is partly closed: Day 12 added the `amoswap`/`amoadd`
+`.w`/`.d` RMW forms and `fence pred,succ` fence kinds (the `.aq`/`.rl` suffixes and `ori`
+remain open). See [`../docs/litmus-parser-coverage.md`](../docs/litmus-parser-coverage.md)
+§"Fence and RMW encoding".

@@ -1,0 +1,28 @@
+Atlas reconstruction over 40 litmus tests x 5 models
+
+== Validation: encoding verdict vs. textbook ==
+Compared cells: 190   matched: 190   mismatched: 0
+
+== Separation atlas: M allows / M' forbids (minimum witness size) ==
+SC       \ TSO      : (no separating test)  [40 T/O]
+SC       \ PSO      : (no separating test)  [40 T/O]
+SC       \ RA       : (no separating test)  [40 T/O]
+SC       \ WEAKEST  : (no separating test)  [40 T/O]
+TSO      \ SC       : R(5), SB(6)  [38 T/O]
+TSO      \ PSO      : (no separating test)  [40 T/O]
+TSO      \ RA       : (no separating test)  [40 T/O]
+TSO      \ WEAKEST  : (no separating test)  [40 T/O]
+PSO      \ SC       : S(4), 2+2W(4), MP(5), R(5), SB(6)  [35 T/O]
+PSO      \ TSO      : S(4), 2+2W(4), MP(5)  [37 T/O]
+PSO      \ RA       : (no separating test)  [40 T/O]
+PSO      \ WEAKEST  : (no separating test)  [40 T/O]
+RA       \ SC       : LB(4), S(4), 2+2W(4), MP(5), R(5), SB(6), WRC(6), IRIW(8)  [32 T/O]
+RA       \ TSO      : LB(4), S(4), 2+2W(4), MP(5), WRC(6), IRIW(8)  [34 T/O]
+RA       \ PSO      : LB(4), WRC(6), IRIW(8)  [37 T/O]
+RA       \ WEAKEST  : (no separating test)  [40 T/O]
+WEAKEST  \ SC       : LB(4), S(4), MP(5), R(5), SB(6), WRC(6), IRIW(8)  [33 T/O]
+WEAKEST  \ TSO      : LB(4), S(4), MP(5), WRC(6), IRIW(8)  [35 T/O]
+WEAKEST  \ PSO      : LB(4), WRC(6), IRIW(8)  [37 T/O]
+WEAKEST  \ RA       : (no separating test)  [40 T/O]
+
+Total wall-clock: 491.8 s (budget 600 s). CSVs in C:\Users\Vidhu\Projects\weakest-visualiser\wev-smt\.
