@@ -1,6 +1,8 @@
 target/
 *.csv
 !eval/*.csv
+# Committed known-good snapshots the POPL artifact diffs against (reproduce.sh).
+!artifact/expected-outputs/*.csv
 eval/corpus/
 eval/_*
 mismatches.txt

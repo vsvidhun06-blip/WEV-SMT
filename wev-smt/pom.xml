@@ -19,9 +19,19 @@
         <junit.version>5.11.3</junit.version>
         <native.dir>${project.build.directory}/native</native.dir>
         <!-- ScalabilitySweep run parameters (spec defaults; override with
-             -Dsweep.budget=<min> -Dsweep.percall=<sec> for a constrained window). -->
+             -Dsweep.budget=<min> -Dsweep.percall=<sec> for a constrained window).
+             The Day-13 artifact reproduction passes a reduced budget so the
+             whole sweep fits the reviewer's time box; the consistency verdicts
+             (the deliverable) are budget-independent. -->
         <sweep.budget>30</sweep.budget>
         <sweep.percall>60</sweep.percall>
+        <!-- CorpusValidation parameters (Day-13 exec:exec@corpus-validation).
+             corpus.dir is the .litmus root; the artifact mounts a corpus volume
+             and overrides it with -Dcorpus.dir=/corpus. -->
+        <corpus.dir>eval/corpus</corpus.dir>
+        <corpus.budgetMin>30</corpus.budgetMin>
+        <corpus.perFileSec>30</corpus.perFileSec>
+        <corpus.maxFiles>0</corpus.maxFiles>
     </properties>
 
     <dependencies>
@@ -78,9 +88,11 @@
 
             <!-- Runs a wev.smt.cli tool in a clean JVM with the Z3 native path.
                  Usage (after `mvn test`, which compiles and copies the natives):
-                     mvn -q exec:exec                      (default: AtlasReconstruct)
+                     mvn -q exec:exec                      (default: AtlasReconstruct, CSVs in working dir)
+                     mvn -q exec:exec@atlas                (AtlasReconstruct, CSVs in eval/)
                      mvn -q exec:exec@scalability-sweep    (Day-9 scalability sweep)
                      mvn -q exec:exec@scalability-fences   (Day-12 fence/RMW sweep)
+                     mvn -q exec:exec@corpus-validation    (Day-11 corpus sweep; -Dcorpus.dir=<root>)
                  The <classpath/> token expands to the full runtime classpath. -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -96,6 +108,19 @@
                     </arguments>
                 </configuration>
                 <executions>
+                    <execution>
+                        <id>atlas</id>
+                        <configuration>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-Djava.library.path=${native.dir}</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>wev.smt.cli.AtlasReconstruct</argument>
+                                <argument>eval</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
                     <execution>
                         <id>scalability-sweep</id>
                         <configuration>
@@ -126,6 +151,25 @@
                                 <argument>${sweep.budget}</argument>
                                 <argument>${sweep.percall}</argument>
                                 <argument>fences</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>corpus-validation</id>
+                        <configuration>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-Xmx2g</argument>
+                                <argument>-Djava.library.path=${native.dir}</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>wev.smt.cli.CorpusValidation</argument>
+                                <argument>${corpus.dir}</argument>
+                                <argument>eval</argument>
+                                <argument>csv=corpus-validation.csv</argument>
+                                <argument>budgetMin=${corpus.budgetMin}</argument>
+                                <argument>perFileSec=${corpus.perFileSec}</argument>
+                                <argument>maxFiles=${corpus.maxFiles}</argument>
                             </arguments>
                         </configuration>
                     </execution>

@@ -1,0 +1,33 @@
+# Expected hierarchy-soundness result — snapshot from commit adb65a7 (Day 13).
+#
+# This output is produced ONLY when a .litmus corpus is mounted at /corpus
+# (see README "Full reproduction"). It is the OPTIONAL extra for the POPL
+# "Reusable" badge; it is NOT required for the "Functional" badge, and the
+# default `docker run` (no volume) skips it.
+#
+# Headline (paper section 6.2): across every fully-parsed-and-validated real
+# litmus test, the encoding never contradicts the soundness lattice
+#     SC subset-of TSO subset-of PSO     and     {SC,TSO,PSO} |= ALLOWED  ==>  WEAKEST |= ALLOWED
+# i.e. ZERO hierarchy violations.
+#
+# Published full-corpus numbers (herd/herdtools7 + hernanponcedeleon/Dat3M):
+#
+#   corpus   validated files   hierarchy violations
+#   ------   ---------------   --------------------
+#   herd7                697                      0
+#   Dat3M               2301                      0
+#   ------   ---------------   --------------------
+#   total               2998                      0
+#
+# What reproduce.sh checks when /corpus is mounted: it re-derives the
+# violation count from the freshly produced eval/corpus-validation.csv with an
+# awk pass over each fully-validated file's five model verdicts, and asserts
+#
+#   hierarchy violations = 0
+#
+# The absolute file *count* depends on which corpus you mount and on the
+# per-file/budget caps you pass, so reproduce.sh asserts only the violation
+# count (which must be 0), not the 2998 total. To reproduce the published 2998
+# exactly, mount the full herd7 + Dat3M trees and use the default 30-minute
+# budget; expect ~24% parse coverage and 0 violations.
+EXPECTED: hierarchy violations = 0
