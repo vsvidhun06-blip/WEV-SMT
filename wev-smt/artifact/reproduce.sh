@@ -4,8 +4,10 @@
 #
 # One command reproduces every eval result: unit tests, the weak-memory atlas,
 # both scalability sweeps (Day-9 consistency + Day-12 fence/RMW), the optional
-# corpus hierarchy-soundness check, and all plots. Each numeric result is diffed
-# against a known-good snapshot in artifact/expected-outputs/ (commit adb65a7).
+# corpus hierarchy-soundness check, the Day-14 edge-case robustness sweep, and all
+# plots. Each numeric result is diffed against a known-good snapshot in
+# artifact/expected-outputs/ (verdict/atlas snapshots at commit adb65a7; the
+# robustness snapshot is Day-14).
 #
 # Diffs compare only DETERMINISTIC columns (verdicts / match outcomes); timing,
 # memory, and minimum-witness-size columns are dropped because they are
@@ -68,15 +70,15 @@ note "repo=$REPO  sweep-budget=${SWEEP_BUDGET_MIN}min  per-call=${SWEEP_PERCALL_
 note ""
 
 # ── Step 1: unit tests ─────────────────────────────────────────────────────
-note "Step 1: Run unit tests (expect 34/34 green)..."
+note "Step 1: Run unit tests (expect 45/45 green)..."
 mvn -o -q test
 read -r T F E < <(awk -F'[:,]' '/Tests run:/{t+=$2; f+=$4; e+=$6} END{print t+0, f+0, e+0}' \
                     "$REPO"/target/surefire-reports/*.txt)
 note "  surefire totals: tests=$T failures=$F errors=$E"
-if [[ "$F" -eq 0 && "$E" -eq 0 && "$T" -eq 34 ]]; then
-  pass "unit tests 34/34 green"
+if [[ "$F" -eq 0 && "$E" -eq 0 && "$T" -eq 45 ]]; then
+  pass "unit tests 45/45 green"
 else
-  fail "unit tests (got tests=$T failures=$F errors=$E; expected 34/0/0)"
+  fail "unit tests (got tests=$T failures=$F errors=$E; expected 45/0/0)"
 fi
 note ""
 
@@ -170,6 +172,37 @@ if python3 "$REPO/artifact/plots/generate-all.py" "$EVAL"; then
   pass "plots generated (eval/plots/*.pdf,*.png)"
 else
   fail "plots (generate-all.py failed)"
+fi
+note ""
+
+# ── Step 7: robustness sweep (Day-14 edge cases A-K) ───────────────────────
+# Each of 11 edge cases must be HANDLED GRACEFULLY (correct verdict, validator
+# rejection, resource refusal, or capped timeout) — never a crash or hang. The
+# tool exits non-zero iff a case threw an unhandled exception; we also diff the
+# deterministic outcome column (time/mem dropped) against the snapshot.
+note "Step 7: Robustness sweep (11 edge cases A-K, expect 11/11 handled)..."
+RB="$EVAL/robustness-report.txt"
+if mvn -o -q exec:exec@robustness | tee "$EVAL/robustness-stdout.txt"; then
+  RB_RC=0
+else
+  RB_RC=$?
+fi
+if [[ -f "$RB" ]]; then
+  handled=$(grep -cE '^[A-K] \|' "$RB" | tr -d ' ')
+  note "  robustness cases recorded: $handled (expect 11), sweep exit=$RB_RC"
+  if diff <(exp_proj "$EXP/robustness-report-expected.txt") \
+          <(grep -E '^[A-K] \|' "$RB" | cut -d'|' -f1,2 | sed 's/[[:space:]]*$//' | sort) \
+       > "/tmp/rbdiff.$$" 2>&1 && [[ "$RB_RC" -eq 0 && "$handled" -eq 11 ]]; then
+    pass "robustness 11/11 handled, outcomes match expected"
+  else
+    fail "robustness (handled=$handled exit=$RB_RC; outcome projection differs — see below)"
+    note "----- diff (expected '<' vs reproduced '>') -----"
+    sed 's/^/    /' "/tmp/rbdiff.$$" | head -40
+    note "-------------------------------------------------"
+  fi
+  rm -f "/tmp/rbdiff.$$"
+else
+  fail "robustness (no robustness-report.txt produced; sweep exit=$RB_RC)"
 fi
 note ""
 

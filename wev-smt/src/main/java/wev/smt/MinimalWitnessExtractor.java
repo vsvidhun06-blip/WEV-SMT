@@ -17,6 +17,10 @@ import org.sosy_lab.java_smt.api.SolverContext;
 import org.sosy_lab.java_smt.api.SolverContext.ProverOptions;
 import org.sosy_lab.java_smt.api.SolverException;
 
+import wev.smt.validate.InputValidator;
+import wev.smt.validate.InvalidEventStructureException;
+import wev.smt.validate.ValidationReport;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -25,6 +29,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Finds minimum-cardinality consistent (and separating) executions of an
@@ -43,6 +49,22 @@ import java.util.function.Function;
  */
 public final class MinimalWitnessExtractor {
 
+    private static final Logger LOG =
+            Logger.getLogger(MinimalWitnessExtractor.class.getName());
+
+    /**
+     * Resource ceilings (Day 14, paper §6.4). A pathological or simply oversized input
+     * could make Z3 run for minutes or exhaust the heap; rather than crash, the extractor
+     * pre-flights the problem size and returns {@link Optional#empty()} above the ceiling,
+     * logging the reason. Both are overridable at the JVM level so a reviewer can probe
+     * the limit ({@code -Dwev.smt.maxEvents=…}, {@code -Dwev.smt.maxVars=…}); they are read
+     * per call, so a test can tighten them temporarily. See {@code wev-smt/docs/limits.md}.
+     */
+    public static final String MAX_EVENTS_PROPERTY = "wev.smt.maxEvents";
+    public static final String MAX_VARS_PROPERTY = "wev.smt.maxVars";
+    public static final int DEFAULT_MAX_EVENTS = 256;
+    public static final int DEFAULT_MAX_VARS = 100_000;
+
     private final SolverContext ctx;
     private final EventStructureEncoder enc;
     private final AxiomaticConsistency axioms;
@@ -59,6 +81,14 @@ public final class MinimalWitnessExtractor {
         this.es = enc.getEventStructure();
         this.bmgr = enc.getBmgr();
         this.imgr = enc.getImgr();
+        // Day 14: validate the structure before encoding. A po cycle / read-without-write /
+        // conflicting init would otherwise reach Z3 as a vacuous UNSAT, masquerading as a
+        // real "forbidden" verdict; fail loud and diagnosable instead.
+        ValidationReport report = InputValidator.validate(es, enc.getDependencyInfo());
+        if (!report.valid()) {
+            throw new InvalidEventStructureException(
+                    "MinimalWitnessExtractor refuses to encode", report);
+        }
         for (Event e : es.getEvents()) {
             activeVars.put(e, bmgr.makeVariable("active_e" + e.getId()));
         }
@@ -66,6 +96,12 @@ public final class MinimalWitnessExtractor {
 
     public Optional<MinimalWitness> findMinimalConsistent(MemoryModel m) {
         if (es.getEvents().isEmpty()) return Optional.empty();
+        String breach = resourceBreach();
+        if (breach != null) {
+            LOG.info(() -> "findMinimalConsistent(" + m + ") skipped: " + breach
+                    + " — returning empty (no crash)");
+            return Optional.empty();
+        }
         long start = System.currentTimeMillis();
         try (OptimizationProverEnvironment opt =
                      ctx.newOptimizationProverEnvironment(ProverOptions.GENERATE_MODELS)) {
@@ -73,7 +109,9 @@ public final class MinimalWitnessExtractor {
             opt.addConstraint(gatedConsistency(m));
             opt.addConstraint(atLeastOneActive());
             opt.minimize(cardinality());
+            logMemory("before solve (findMinimalConsistent " + m + ")");
             OptStatus s = opt.check();
+            logMemory("after solve (findMinimalConsistent " + m + ")");
             if (s != OptStatus.OPT) return Optional.empty();
             try (Model model = opt.getModel()) {
                 return Optional.of(buildWitness(model, m, null,
@@ -104,6 +142,12 @@ public final class MinimalWitnessExtractor {
                                                           MemoryModel forbid,
                                                           long perCallBudgetMs) {
         if (es.getEvents().isEmpty()) return Optional.empty();
+        String breach = resourceBreach();
+        if (breach != null) {
+            LOG.info(() -> "findMinimalSeparating(" + allow + "\\" + forbid + ") skipped: "
+                    + breach + " — returning empty (no crash)");
+            return Optional.empty();
+        }
         long start = System.currentTimeMillis();
         long deadline = (perCallBudgetMs == Long.MAX_VALUE)
                 ? Long.MAX_VALUE : start + perCallBudgetMs;
@@ -321,6 +365,53 @@ public final class MinimalWitnessExtractor {
             case RA -> axioms.consistencyRA(active);
             case WEAKEST -> axioms.consistencyWEAKEST(active);
         };
+    }
+
+    // ── Resource limits (Day 14, paper §6.4) ──────────────────────────────
+
+    /**
+     * The reason this problem exceeds a configured resource ceiling, or {@code null} if it
+     * is within limits. Read per call so {@code -Dwev.smt.maxEvents} / {@code -Dwev.smt.maxVars}
+     * (and a test setting them) take effect dynamically. Checked once up front in each
+     * search entry point; a breach yields {@link Optional#empty()}, never a crash.
+     */
+    private String resourceBreach() {
+        int n = es.getEvents().size();
+        int maxEvents = Integer.getInteger(MAX_EVENTS_PROPERTY, DEFAULT_MAX_EVENTS);
+        if (n > maxEvents) {
+            return "event count " + n + " exceeds " + MAX_EVENTS_PROPERTY + "=" + maxEvents;
+        }
+        long vars = estimatedVars();
+        long maxVars = Integer.getInteger(MAX_VARS_PROPERTY, DEFAULT_MAX_VARS);
+        if (vars > maxVars) {
+            return "estimated SMT variable count " + vars + " exceeds "
+                    + MAX_VARS_PROPERTY + "=" + maxVars;
+        }
+        return null;
+    }
+
+    /**
+     * A cheap static estimate of the decision-variable footprint: two integer vars per
+     * event (position + ew-group), one boolean per {@code rf}/{@code jf}/{@code co} edge,
+     * and one per syntactic dependency edge. The per-model layer/reachability vars minted
+     * inside each consistency call are not counted (they vary by model), so this is a
+     * conservative lower bound — a screening heuristic, not an exact count.
+     */
+    long estimatedVars() {
+        long n = es.getEvents().size();
+        return 2 * n
+                + enc.getRfVars().size() + enc.getJfVars().size() + enc.getCoVars().size()
+                + enc.getDataDepVars().size() + enc.getAddrDepVars().size()
+                + enc.getCtrlDepVars().size();
+    }
+
+    /** Log a heap snapshot around a solve (FINE; off by default, on for resource debugging). */
+    private void logMemory(String when) {
+        if (!LOG.isLoggable(Level.FINE)) return;
+        Runtime rt = Runtime.getRuntime();
+        long totalMb = rt.totalMemory() / (1024 * 1024);
+        long usedMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
+        LOG.fine("[mem] " + when + ": heap total=" + totalMb + "MB used=" + usedMb + "MB");
     }
 
     // ── Static utilities ──────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 #
 # WEV-SMT POPL artifact image. One `docker run` reproduces every eval result:
-# the 34-test suite, the weak-memory atlas (190/190/0), both scalability sweeps
+# the 45-test suite, the weak-memory atlas (190/190/0), both scalability sweeps
 # (Day-9 consistency + Day-12 fence/RMW), an optional corpus hierarchy-soundness
-# check, and all plots.
+# check, the Day-14 edge-case robustness sweep, and all plots.
 #
 # The build context is the wev-smt/ subproject, so the whole project is copied in
 # (this is the COPY ../wev-smt that the spec calls for — Docker cannot COPY from
@@ -72,7 +72,7 @@ COPY . /opt/wev-smt
 
 # Warm the cache and verify the build deterministically: this downloads JavaSMT and
 # the linux-x64 Z3 native (libz3.so / libz3java.so, via the OS-activated Maven
-# profile) into ~/.m2 and runs all 34 tests; `dependency:resolve-plugins` additionally
+# profile) into ~/.m2 and runs all 45 tests; `dependency:resolve-plugins` additionally
 # fetches the exec-maven-plugin used by the reproduction. After this layer every
 # `mvn -o` in reproduce.sh runs fully offline.
 RUN mvn -B -q -DskipITs test \

@@ -5,6 +5,12 @@ target/
 !artifact/expected-outputs/*.csv
 eval/corpus/
 eval/_*
+# Per-run regeneration outputs: re-created by every atlas/sweep/robustness run.
+# The committed eval/*.csv are curated snapshots; these are raw run artifacts.
+eval/atlas-separations.csv
+eval/consistency-validation.csv
+eval/robustness-report.txt
+eval/*-stdout.txt
 mismatches.txt
 *.iml
 .idea/

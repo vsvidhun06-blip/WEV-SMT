@@ -93,6 +93,7 @@
                      mvn -q exec:exec@scalability-sweep    (Day-9 scalability sweep)
                      mvn -q exec:exec@scalability-fences   (Day-12 fence/RMW sweep)
                      mvn -q exec:exec@corpus-validation    (Day-11 corpus sweep; -Dcorpus.dir=<root>)
+                     mvn -q exec:exec@robustness           (Day-14 edge-case robustness sweep, report in eval/)
                  The <classpath/> token expands to the full runtime classpath. -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -170,6 +171,20 @@
                                 <argument>budgetMin=${corpus.budgetMin}</argument>
                                 <argument>perFileSec=${corpus.perFileSec}</argument>
                                 <argument>maxFiles=${corpus.maxFiles}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>robustness</id>
+                        <configuration>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-Xmx2g</argument>
+                                <argument>-Djava.library.path=${native.dir}</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>wev.smt.cli.RobustnessSweep</argument>
+                                <argument>eval</argument>
                             </arguments>
                         </configuration>
                     </execution>

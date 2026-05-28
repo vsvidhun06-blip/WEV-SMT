@@ -3,13 +3,16 @@
 This artifact reproduces every evaluation result for the paper's SMT
 minimum-witness backend for weak-memory consistency (`wev-smt`):
 
-* the **34-test** unit suite,
+* the **45-test** unit suite,
 * the **weak-memory atlas** — 40 litmus tests × 5 models, **190 compared / 190
   matched / 0 mismatched**,
 * the **Day-9 scalability sweep** (consistency decision time vs thread count),
-* the **Day-12 fence/RMW scalability sweep** (two new parametric families), and
+* the **Day-12 fence/RMW scalability sweep** (two new parametric families),
 * an **optional corpus hierarchy-soundness check** (0 violations across the real
-  herd7 + Dat3M corpora).
+  herd7 + Dat3M corpora), and
+* the **Day-14 robustness sweep** — 11 edge cases (A–K), **all handled gracefully**
+  (a correct verdict, a validator rejection, a resource refusal, or a capped
+  timeout — never a crash, hang, or silent wrong answer).
 
 It is packaged as a single Docker image. One `docker run` executes all of the
 above, diffs each numeric result against a committed known-good snapshot
@@ -57,13 +60,14 @@ The run prints a step-by-step log and ends with a checklist. Expected tail:
 
 ```
 === Validation checklist ===
-  PASS  unit tests 34/34 green
+  PASS  unit tests 45/45 green
   PASS  atlas 190/190 matched, 0 mismatched
   PASS  atlas validation projection vs expected
   PASS  scalability-consistency verdicts vs expected
   PASS  scalability-fences verdicts vs expected
   SKIP  corpus hierarchy-soundness (/corpus not mounted — optional, Reusable-badge extra)
   PASS  plots generated (eval/plots/*.pdf,*.png)
+  PASS  robustness 11/11 handled, outcomes match expected
 === Reproduction complete: ALL CHECKS PASSED ===
 ```
 
@@ -120,6 +124,7 @@ docker run --rm -e SWEEP_BUDGET_MIN=10 wev-smt-artifact:adb65a7
 | `scalability-consistency.csv`       | 180 rows; `WEAKEST` decision time near-linear up to `n=16` |
 | `scalability-fences.csv`            | 135 rows; `SBChainMfence`/`RMWChain` overhead < 3× the `SBNThread` baseline (≈2.6× on reference HW) |
 | `atlas-separations.csv`             | the separation atlas (budget-limited; informational, not diffed) |
+| `robustness-report.txt`             | 11 edge cases A–K, each handled gracefully; ends `11/11 handled gracefully, no crashes` (outcome column diffed, time/mem not) |
 | `plots/scalability-curves.{pdf,png}`| log-log decision time vs `n`, per family, per model |
 | `plots/atlas-heatmap.{pdf,png}`     | all-green (match) grid, 10 grey (unknown) cells |
 | `plots/separation-matrix.{pdf,png}` | min separating-witness size per model pair |
@@ -127,13 +132,14 @@ docker run --rm -e SWEEP_BUDGET_MIN=10 wev-smt-artifact:adb65a7
 ### Validation checklist
 
 ```
-[ ] 34/34 unit tests green
+[ ] 45/45 unit tests green
 [ ] Atlas: 190/190 matched, 0 mismatched
 [ ] Atlas validation projection == expected-outputs/atlas-expected.txt
 [ ] Scalability-consistency: verdicts == expected; WEAKEST near-linear at n=16
 [ ] Scalability-fences: verdicts == expected; worst overhead < 3× at n≤4 (≈2.6× on reference HW)
 [ ] Hierarchy-soundness: 0 violations  (only if /corpus mounted)
 [ ] Plots produced (PDF + PNG)
+[ ] Robustness: 11/11 edge cases handled; outcomes == expected-outputs/robustness-report-expected.txt
 ```
 
 The diffs compare only **deterministic** columns (verdicts / match outcomes);
@@ -143,10 +149,11 @@ lines.
 
 ## 6. Runtime
 
-On the recommended hardware, steps 1–4 plus plots complete in **well under 30
-minutes** (the atlas is self-bounded at ≈8 minutes; each sweep ≈3 minutes at the
-default budget; tests and plots ≈1 minute each). The optional corpus step adds up
-to `CORPUS_BUDGET_MIN` minutes.
+On the recommended hardware, steps 1–4, plots, and the robustness sweep complete
+in **well under 30 minutes** (the atlas is self-bounded at ≈8 minutes; each sweep
+≈3 minutes at the default budget; tests, plots, and the robustness sweep ≈1 minute
+each — the robustness sweep is self-bounded at a 90 s per-case cap). The optional
+corpus step adds up to `CORPUS_BUDGET_MIN` minutes.
 
 ## 7. Troubleshooting
 

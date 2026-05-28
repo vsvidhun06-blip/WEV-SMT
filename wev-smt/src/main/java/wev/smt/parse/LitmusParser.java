@@ -11,6 +11,9 @@ import com.weakest.model.WriteEvent;
 import wev.smt.DependencyInfo;
 import wev.smt.LitmusCorpus.Outcome;
 import wev.smt.MemoryModel;
+import wev.smt.validate.InputValidator;
+import wev.smt.validate.InvalidEventStructureException;
+import wev.smt.validate.ValidationReport;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -204,6 +207,14 @@ public final class LitmusParser {
             buildEvents(threads);
             wireReadsFrom();
             wireCoherence();
+            // Day 14: validate the assembled structure before producing the case, so a
+            // parser bug that emits e.g. a read with no write surfaces as a clear
+            // InvalidEventStructureException rather than a misleading SMT-UNSAT downstream.
+            ValidationReport report = InputValidator.validate(es, deps);
+            if (!report.valid()) {
+                throw new InvalidEventStructureException(
+                        "[" + src + "] parsed structure is invalid", report);
+            }
             return new LitmusCase(src, arch, name, es, deps, existsClause,
                     expectations, herdObservation);
         }
