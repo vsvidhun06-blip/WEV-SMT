@@ -1,0 +1,21 @@
+C LB-fake-xor-cycle
+(* Paper §4 worked example: LB with a fake dep where the write value is *)
+(* the constant 1, so the LB cycle r0=r1=1 is wired faithfully. The idiom *)
+(* r^r^1 = 0^1 = 1: dependsReally folds r^r→0 so the data dep is still *)
+(* classified isSemantic=false, but evalConst yields the constant 1 so *)
+(* the candidate execution manifests the thin-air outcome r0=r1=1. Under *)
+(* WEAKEST this cycle is admitted (SAT) because the fake dep is excluded *)
+(* from sdep — jfCoherence sees no cycle in sdep∪jf. The semantic-dep *)
+(* counterpart LB-real.litmus has the same wired candidate but *)
+(* isSemantic=true, and WEAKEST FORBIDS it (UNSAT). That ALLOWED-vs- *)
+(* FORBIDDEN flip, on identical structure with identical written values, *)
+(* is what isSemantic gates via jfCoherence. *)
+(* The paren-free spelling r^r^1 is functionally (r^r)|1: equivalent *)
+(* canceling idioms that fold to 0 then set bit 0. The |-form is blocked *)
+(* by the C_WRITE_ONCE regex truncating at the first ')', so we use the *)
+(* xor-with-1 form which parses cleanly and evalConst genuinely produces 1. *)
+{ }
+ P0                          | P1                          ;
+ r0 = READ_ONCE(*y)          | r1 = READ_ONCE(*x)          ;
+ WRITE_ONCE(*x, r0 ^ r0 ^ 1) | WRITE_ONCE(*y, r1 ^ r1 ^ 1) ;
+exists (0:r0=1 /\ 1:r1=1)

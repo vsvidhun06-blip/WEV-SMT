@@ -1,0 +1,21 @@
+C LB-fake-xor
+(* Paper §4 worked example: load-buffering with a fake (identity-XOR) data dep. *)
+(* The store writes r^r, which dependsReally folds to 0, so the data edge is *)
+(* recorded isSemantic=false. Demonstrates the SYNTACTIC fake-dep classifier. *)
+(* *)
+(* Wiring caveat: evalConst(r^r) = 0, so the program write to x and y is *)
+(* literally the value 0. The exists clause names r0=r1=1 but the parser *)
+(* cannot find a write of 1 and defaults the rf edges to the initial writes *)
+(* (it logs "no write of value 1 to 'x'; defaulting read to the initial *)
+(* write" on stderr). The wired candidate execution is therefore r0=r1=0, *)
+(* not the intended LB cycle r0=r1=1. AxiomaticConsistency WEAKEST returns *)
+(* SAT, but this is trivially-SAT on the all-zeros candidate — NOT a *)
+(* jfCoherence-driven verdict on the thin-air cycle. The companion file *)
+(* LB-fake-xor-cycle.litmus uses r^r^1 to write a constant 1 instead, *)
+(* yielding a faithful r=r=1 wiring where the SAT verdict genuinely reflects *)
+(* jfCoherence admitting the cycle because the fake dep is excluded from sdep. *)
+{ }
+ P0                       | P1                       ;
+ r0 = READ_ONCE(*y)       | r1 = READ_ONCE(*x)       ;
+ WRITE_ONCE(*x, r0 ^ r0)  | WRITE_ONCE(*y, r1 ^ r1)  ;
+exists (0:r0=1 /\ 1:r1=1)

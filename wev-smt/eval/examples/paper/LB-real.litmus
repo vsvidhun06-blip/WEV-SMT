@@ -1,0 +1,8 @@
+C LB-real
+(* Paper §4 worked example, contrast file: LB with a real data dep (r+1). *)
+(* dependsReally classifies isSemantic=true; companion to LB-fake-xor.litmus. *)
+{ }
+ P0                       | P1                       ;
+ r0 = READ_ONCE(*y)       | r1 = READ_ONCE(*x)       ;
+ WRITE_ONCE(*x, r0 + 1)   | WRITE_ONCE(*y, r1 + 1)   ;
+exists (0:r0=1 /\ 1:r1=1)
