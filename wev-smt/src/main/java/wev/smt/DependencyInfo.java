@@ -126,6 +126,32 @@ public final class DependencyInfo {
         return Collections.unmodifiableList(out);
     }
 
+    /** Which of the three syntactic relations an edge belongs to. */
+    public enum DepKind { DATA, ADDR, CTRL }
+
+    /** A {@link DepEdge} tagged with the relation ({@code data}/{@code addr}/{@code ctrl}) it came from. */
+    public record KindedEdge(DepKind kind, DepEdge edge) { }
+
+    /**
+     * Every dependency edge across {@code data ∪ addr ∪ ctrl}, semantic and fake alike,
+     * each tagged with its relation. Unlike {@link #semanticEdges()} this keeps the fake
+     * edges (and their {@link DepEdge#isSemantic()} flag), for tooling that audits the
+     * fake/semantic split itself rather than consuming only the jf-coherence relation.
+     */
+    public List<KindedEdge> allEdges() {
+        List<KindedEdge> out = new ArrayList<>();
+        collect(out, DepKind.DATA, dataDeps);
+        collect(out, DepKind.ADDR, addrDeps);
+        collect(out, DepKind.CTRL, ctrlDeps);
+        return Collections.unmodifiableList(out);
+    }
+
+    private static void collect(List<KindedEdge> out, DepKind kind, Map<Event, Set<DepEdge>> rel) {
+        for (Set<DepEdge> edges : rel.values()) {
+            for (DepEdge e : edges) out.add(new KindedEdge(kind, e));
+        }
+    }
+
     /** Whether this sidecar carries no dependency edge of any kind. */
     public boolean isEmpty() {
         return dataDeps.isEmpty() && addrDeps.isEmpty() && ctrlDeps.isEmpty();

@@ -98,6 +98,26 @@ public final class LitmusParser {
         boolean isAsm() { return this != C; }
     }
 
+    // ── Detector-quality instrumentation (additive; inert unless a sink is set) ──
+
+    /**
+     * One classification decision the fake/semantic detector ({@link Job#dependsReally})
+     * makes: for a single register {@code reg} used in {@code expr}, whether that use is a
+     * <em>real</em> (value-carrying) dependency, and which idiom {@code pattern} the
+     * verdict rests on ({@code "REAL"} when no cancellation fires). {@code producerReadIds}
+     * are the ids of the {@link ReadEvent}s whose value reaches {@code expr} through
+     * {@code reg} — the producers of any dependency edge this decision governs.
+     *
+     * <p>Emitted only when {@link #DEP_TRACE} is installed; the field is inert (and the
+     * detector byte-for-byte unchanged) otherwise. Not thread-safe by design — a sweep
+     * sets the sink, parses one file, drains it, single-threaded.
+     */
+    public record DepDecision(String expr, String reg, boolean real, String pattern,
+                              List<Integer> producerReadIds) { }
+
+    /** Optional sink for {@link DepDecision}s; {@code null} (the default) disables tracing. */
+    public static volatile java.util.function.Consumer<DepDecision> DEP_TRACE = null;
+
     // ── Public API ──────────────────────────────────────────────────────────
 
     /** Parse one {@code .litmus} file body. Throws {@link ParseException} on failure. */
@@ -714,13 +734,20 @@ public final class LitmusParser {
          */
         private Map<ReadEvent, Boolean> referencedReads(String expr, Map<String, RegSrc> env) {
             Map<ReadEvent, Boolean> acc = new LinkedHashMap<>();
+            var trace = DEP_TRACE;                       // read the volatile once
             for (String reg : identifiers(expr)) {
                 RegSrc s = env.get(reg);
                 if (s == null) continue;
-                boolean useReal = dependsReally(expr, reg);
+                Verdict v = classify(expr, reg);
+                boolean useReal = v.real();
                 for (Map.Entry<ReadEvent, Boolean> e : s.reads().entrySet()) {
                     boolean sem = useReal && e.getValue();
                     acc.merge(e.getKey(), sem, Boolean::logicalOr);
+                }
+                if (trace != null) {
+                    List<Integer> ids = new ArrayList<>();
+                    for (ReadEvent r : s.reads().keySet()) ids.add(r.getId());
+                    trace.accept(new DepDecision(expr, reg, v.real(), v.pattern(), ids));
                 }
             }
             return acc;
@@ -1036,13 +1063,31 @@ public final class LitmusParser {
             return new Insn(IKind.RMW, reg, loc, false, null, null, MemoryOrder.SC, raw);
         }
 
+        /**
+         * Split an operand list on top-level commas only. Commas inside a bracketed
+         * address expression — AArch64 indexed forms like {@code [X5,W4,SXTW]} or
+         * {@code [X5,#8]}, and the parenthesised {@code disp(rB)} of PPC/RISC-V — are
+         * <em>not</em> separators: the whole {@code [...]} / {@code (...)} stays one
+         * operand so {@link AsmLexicon#memRef} can still see the index register. Splitting
+         * on every comma (the old behaviour) severed {@code [X5} from {@code W4,SXTW]},
+         * dropping the index register and every address dependency it carried.
+         */
         private static List<String> splitOperands(String rest) {
             List<String> out = new ArrayList<>();
             if (rest == null || rest.isBlank()) return out;
-            for (String o : rest.split(",")) {
-                String s = o.strip();
-                if (!s.isEmpty()) out.add(s);
+            int depth = 0, start = 0;
+            for (int i = 0; i < rest.length(); i++) {
+                char c = rest.charAt(i);
+                if (c == '[' || c == '(') depth++;
+                else if (c == ']' || c == ')') { if (depth > 0) depth--; }
+                else if (c == ',' && depth == 0) {
+                    String s = rest.substring(start, i).strip();
+                    if (!s.isEmpty()) out.add(s);
+                    start = i + 1;
+                }
             }
+            String s = rest.substring(start).strip();
+            if (!s.isEmpty()) out.add(s);
             return out;
         }
 
@@ -1117,28 +1162,126 @@ public final class LitmusParser {
          * varies with {@code reg}. Self-cancelling identity idioms ({@code r^r}, {@code
          * r-r}, {@code r&~r}, {@code r|~r}, {@code r*0}, {@code r&0}) are folded to
          * constants first; if {@code reg} no longer appears, the dependency is fake.
+         *
+         * <p>A second, complementary canceller handles idioms the adjacency-based pattern
+         * folder misses: <em>linear-arithmetic</em> forms where {@code reg}'s occurrences
+         * cancel across intervening terms, e.g. the {@code a+1-a} store value of the
+         * Leaky-Semicolon LBfd test (Jeffrey et al., "The Leaky Semicolon", POPL 2022).
+         * Adjacency folding cannot see {@code a-a} in {@code a+1-a}; the linear pass
+         * computes {@code reg}'s net coefficient over {@code + -} and calls the dependency
+         * fake iff that coefficient is exactly zero — a value that is provably invariant
+         * in {@code reg} over the integers (the cancellation is symbolic and holds under
+         * two's-complement wraparound too). It is <em>sound in the soundness-critical
+         * direction</em>: it only ever demotes an edge to fake on a proof of invariance and
+         * bails (leaving the edge semantic) on anything non-linear, so no genuinely
+         * value-carrying dependency is dropped — {@code sdep_true ⊆ sdep_impl} is preserved.
          */
         private static boolean dependsReally(String expr, String reg) {
+            return classify(expr, reg).real();
+        }
+
+        /**
+         * The detector's verdict for one {@code (expr, reg)} use: whether {@code reg} is a
+         * <em>real</em> dependency, plus the idiom {@code pattern} the verdict rests on.
+         * {@code "REAL"} when nothing cancels; otherwise the specific cancellation
+         * ({@code "r^r"}, {@code "r&0"}, {@code "LINEAR_CANCEL"}, a {@code +}-joined
+         * combination, …). Pure classification split out from {@link #dependsReally} so the
+         * detector-quality instrumentation can name the matched pattern; the boolean result
+         * is identical to the pre-split logic.
+         */
+        private record Verdict(boolean real, String pattern) { }
+
+        private static Verdict classify(String expr, String reg) {
             String e = expr.replaceAll("\\s+", "");
             String R = Pattern.quote(reg);
             String[] toZero = {
                     R + "\\^" + R, R + "-" + R, R + "&~" + R, "~" + R + "&" + R,
                     R + "\\*0", "0\\*" + R, R + "&0", "0&" + R
             };
+            String[] toZeroName = { "r^r", "r-r", "r&~r", "~r&r", "r*0", "0*r", "r&0", "0&r" };
             String[] toOnes = { R + "\\|~" + R, "~" + R + "\\|" + R };
+            String[] toOnesName = { "r|~r", "~r|r" };
+            LinkedHashSet<String> fired = new LinkedHashSet<>();
             boolean changed = true;
             while (changed) {
                 changed = false;
-                for (String z : toZero) {
-                    String n = e.replaceAll(bounded(z), "0");
-                    if (!n.equals(e)) { e = n; changed = true; }
+                for (int i = 0; i < toZero.length; i++) {
+                    String n = e.replaceAll(bounded(toZero[i]), "0");
+                    if (!n.equals(e)) { e = n; changed = true; fired.add(toZeroName[i]); }
                 }
-                for (String a : toOnes) {
-                    String n = e.replaceAll(bounded(a), "1");
-                    if (!n.equals(e)) { e = n; changed = true; }
+                for (int i = 0; i < toOnes.length; i++) {
+                    String n = e.replaceAll(bounded(toOnes[i]), "1");
+                    if (!n.equals(e)) { e = n; changed = true; fired.add(toOnesName[i]); }
                 }
             }
-            return Pattern.compile("(?<![A-Za-z0-9_])" + R + "(?![A-Za-z0-9_])").matcher(e).find();
+            boolean mentionsReg =
+                    Pattern.compile("(?<![A-Za-z0-9_])" + R + "(?![A-Za-z0-9_])").matcher(e).find();
+            if (!mentionsReg) {
+                return new Verdict(false, fired.isEmpty() ? "ABSENT" : String.join("+", fired));
+            }
+            // Linear-arithmetic normalization on the (already idiom-folded) expression: a
+            // net zero coefficient for reg means the value is invariant in reg ⇒ fake.
+            Integer coeff = linearCoefficient(e, reg);
+            if (coeff != null && coeff == 0) {
+                fired.add("LINEAR_CANCEL");
+                return new Verdict(false, String.join("+", fired));
+            }
+            return new Verdict(true, fired.isEmpty() ? "REAL" : String.join("+", fired) + "+REAL");
+        }
+
+        /**
+         * The net coefficient of {@code reg} when {@code e} (whitespace-free) is a flat
+         * sum/difference of integer literals and bare register identifiers — {@code a+1-a}
+         * ⇒ 0, {@code a+a-1} ⇒ 2, {@code r0+r1-r0} ⇒ 0 (for {@code reg=r0}). Returns
+         * {@code null} when {@code e} is <em>not</em> such a purely additive form: any
+         * {@code * ^ & | ~ ( )}, or an identifier abutting more text, makes the expression
+         * non-linear and the caller must then treat {@code reg} conservatively as real. A
+         * returned {@code 0} is therefore a proof of invariance, never a guess.
+         */
+        private static Integer linearCoefficient(String e, String reg) {
+            int coeff = 0;
+            int sign = 1;
+            boolean expectTerm = true;         // at a position where a term may begin
+            int i = 0, n = e.length();
+            while (i < n) {
+                char c = e.charAt(i);
+                if (c == '+' || c == '-') {
+                    if (expectTerm) {          // unary sign on the upcoming term
+                        if (c == '-') sign = -sign;
+                    } else {                    // binary additive operator between terms
+                        sign = (c == '-') ? -1 : 1;
+                        expectTerm = true;
+                    }
+                    i++;
+                    continue;
+                }
+                if (!expectTerm) return null;   // two adjacent terms, no operator ⇒ non-linear
+                if (Character.isLetter(c) || c == '_') {          // identifier term
+                    int start = i;
+                    while (i < n && (Character.isLetterOrDigit(e.charAt(i)) || e.charAt(i) == '_')) i++;
+                    if (e.substring(start, i).equals(reg)) coeff += sign;
+                    expectTerm = false;
+                    sign = 1;
+                    continue;
+                }
+                if (Character.isDigit(c)) {                        // integer literal term
+                    if (c == '0' && i + 1 < n && (e.charAt(i + 1) == 'x' || e.charAt(i + 1) == 'X')) {
+                        i += 2;
+                        while (i < n && isHexDigit(e.charAt(i))) i++;
+                    } else {
+                        while (i < n && Character.isDigit(e.charAt(i))) i++;
+                    }
+                    expectTerm = false;
+                    sign = 1;
+                    continue;
+                }
+                return null;                    // * ^ & | ~ ( ) … ⇒ not a flat additive form
+            }
+            return expectTerm ? null : coeff;   // trailing operator ⇒ malformed
+        }
+
+        private static boolean isHexDigit(char c) {
+            return Character.isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         }
 
         private static String bounded(String p) {
