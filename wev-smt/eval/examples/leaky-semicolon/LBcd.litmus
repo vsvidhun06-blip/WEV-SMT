@@ -1,0 +1,15 @@
+C LBcd
+(* Leaky Semicolon (Jeffrey et al., POPL 2022), LBcd: load-buffering with a genuine *)
+(* CONTROL dependency. Each store is guarded by a branch on the loaded value, so     *)
+(* the store happens only when the load returns 1 and its occurrence is genuinely    *)
+(* control-dependent on the load. PwT preserves the control dependency (a store's     *)
+(* predicate transformer carries the branch condition) and FORBIDS the r0=r1=1        *)
+(* self-justifying cycle.                                                            *)
+(*                                                                                  *)
+(* wev-smt: the parser flattens the guarded store to a branch-on-read followed by    *)
+(* the store and records read->store ctrl with isSemantic=true; the CURRENT detector *)
+(* keeps ctrl in sdep.                                                              *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); if (r0 == 1) ; WRITE_ONCE(*y, 1); }
+P1(int *x, int *y) { r1 = READ_ONCE(*y); if (r1 == 1) ; WRITE_ONCE(*x, 1); }
+exists (0:r0=1 /\ 1:r1=1)

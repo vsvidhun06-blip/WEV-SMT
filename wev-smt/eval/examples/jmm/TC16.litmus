@@ -1,0 +1,11 @@
+C TC16
+(* JMM causality test case 16 (Pugh 2004). Data-dependency chain x->y->z->x (P0,P1,P2) *)
+(* where P2 ALSO writes x=2 unconditionally. The independent x=2 write can justify the *)
+(* propagated value without the cycle. JMM DECISION: ALLOWED. Wiring note: copy-chain   *)
+(* hops past a constant source do not wire, so the verdict reflects consistency of the  *)
+(* wired candidate rather than a fully-propagated value-2 chain.                        *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0); }
+P1(int *y, int *z) { r0 = READ_ONCE(*y); WRITE_ONCE(*z, r0); }
+P2(int *x, int *z) { r0 = READ_ONCE(*z); WRITE_ONCE(*x, r0); WRITE_ONCE(*x, 2); }
+exists (0:r0=2 /\ 1:r0=2 /\ 2:r0=2)

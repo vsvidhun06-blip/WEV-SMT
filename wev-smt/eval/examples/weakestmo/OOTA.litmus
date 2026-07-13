@@ -1,0 +1,14 @@
+C OOTA
+(* Weakestmo (Chakraborty & Vafeiadis, POPL 2019): the canonical out-of-thin-air  *)
+(* read. Two threads each copy the value they load into the store the other reads, *)
+(* closing a dependency u reads-from cycle in which the value 1 is justified only   *)
+(* by itself. This is THE motivating example for the paper's event-structure       *)
+(* grounding: a naive per-execution semantics admits 1 from nowhere, Weakestmo     *)
+(* FORBIDS it. Structurally identical to LBd (both threads carry a real semantic    *)
+(* data dependency); the r+1 spelling keeps the store value a genuine function of   *)
+(* the load so the dependency is not folded away.                                   *)
+{ }
+ P0                        | P1                        ;
+ r0 = READ_ONCE(*x)        | r1 = READ_ONCE(*y)        ;
+ WRITE_ONCE(*y, r0 + 1)    | WRITE_ONCE(*x, r1 + 1)    ;
+exists (0:r0=1 /\ 1:r1=1)

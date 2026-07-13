@@ -1,0 +1,12 @@
+C TC04
+(* JMM causality test case 4 (Pugh 2004). Same as TC03 but BOTH arms of P0's guard  *)
+(* write x=1, so the store happens unconditionally with a fixed value: the control   *)
+(* dependency is REDUNDANT (fake). JMM DECISION: ALLOWED (a compiler may remove the   *)
+(* redundant branch). LIMITATION: the wev C parser has no brace/else handling, so     *)
+(* both-arms-write flattens to the SAME event structure as genuine TC03 and records   *)
+(* the ctrl edge isSemantic=true unconditionally -- it cannot see both arms write 1.  *)
+(* Intended source: P0: r0=READ(y); if(r0==1) x=1 else x=1.                           *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); if (r0 == 1) ; WRITE_ONCE(*x, 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); }
+exists (0:r0=1 /\ 1:r0=1)

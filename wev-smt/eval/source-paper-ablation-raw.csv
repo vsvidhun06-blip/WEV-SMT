@@ -1,0 +1,15 @@
+source,file,dataDeps,addrDeps,ctrlDeps,semData,semAddr,semCtrl,verdict_none,verdict_all-deps-semantic,verdict_current
+weakestmo,LB.litmus,0,0,0,0,0,0,ALLOWED,ALLOWED,ALLOWED
+weakestmo,LBd.litmus,2,0,0,2,0,0,ALLOWED,FORBIDDEN,FORBIDDEN
+weakestmo,OOTA.litmus,2,0,0,2,0,0,ALLOWED,FORBIDDEN,FORBIDDEN
+weakestmo,LB+ctrl.litmus,0,0,2,0,0,2,ALLOWED,FORBIDDEN,FORBIDDEN
+weakestmo,MP.litmus,0,0,0,0,0,0,ALLOWED,ALLOWED,ALLOWED
+weakestmo,CoRR.litmus,0,0,0,0,0,0,FORBIDDEN,FORBIDDEN,FORBIDDEN
+weakestmo,CoRW.litmus,0,0,0,0,0,0,FORBIDDEN,FORBIDDEN,FORBIDDEN
+weakestmo,CoWR.litmus,0,0,0,0,0,0,FORBIDDEN,FORBIDDEN,FORBIDDEN
+leaky-semicolon,LB.litmus,0,0,0,0,0,0,ALLOWED,ALLOWED,ALLOWED
+leaky-semicolon,LBd.litmus,2,0,0,2,0,0,ALLOWED,FORBIDDEN,FORBIDDEN
+leaky-semicolon,LBfd.litmus,2,0,0,0,0,0,ALLOWED,FORBIDDEN,ALLOWED
+leaky-semicolon,LBxor.litmus,2,0,0,0,0,0,ALLOWED,FORBIDDEN,ALLOWED
+leaky-semicolon,LBcd.litmus,0,0,2,0,0,2,ALLOWED,FORBIDDEN,FORBIDDEN
+leaky-semicolon,LBfc.litmus,0,0,2,0,0,2,ALLOWED,FORBIDDEN,FORBIDDEN

@@ -1,0 +1,11 @@
+C TC14
+(* JMM causality test case 14 (Pugh 2004). "Algebraic cancellation" trap: P0 reads x  *)
+(* twice (r0,r1) and stores y with a value that LOOKS like it cancels to a constant    *)
+(* (r0-r1+1 == 1 if r0==r1). But two reads of a racy location need not agree, so the   *)
+(* dependency is REAL and the cyclic outcome is thin-air. JMM DECISION: FORBIDDEN.     *)
+(* wev: the fake-dep detector folds single-register idioms (r^r, r-r) but r0-r1 uses   *)
+(* two DISTINCT registers, so it is (correctly) NOT folded -- isSemantic=true.         *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); r1 = READ_ONCE(*x); WRITE_ONCE(*y, r0 - r1 + 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, r0 + 1); }
+exists (0:r0=1 /\ 1:r0=1)

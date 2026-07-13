@@ -1,0 +1,12 @@
+C LB
+(* Jeffrey, Riely, Batty, Cooksey, Kang, Vafeiadis, "The Leaky Semicolon:          *)
+(* Compositional Semantic Dependencies for Relaxed-Memory Concurrency", POPL 2022.  *)
+(* Base load-buffering: both stores write the constant 1, so there is no dependency  *)
+(* from either load to the following store. The PwT (pomsets-with-predicate-         *)
+(* transformers) semantics ALLOWS the r0=r1=1 outcome — independent stores may be    *)
+(* reordered before the loads.                                                       *)
+{ }
+ P0                    | P1                    ;
+ r0 = READ_ONCE(*x)    | r1 = READ_ONCE(*y)    ;
+ WRITE_ONCE(*y, 1)     | WRITE_ONCE(*x, 1)     ;
+exists (0:r0=1 /\ 1:r1=1)

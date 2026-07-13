@@ -1,0 +1,14 @@
+C LBxor
+(* Leaky Semicolon (Jeffrey et al., POPL 2022), LBxor: load-buffering with a FALSE  *)
+(* dependency built from exclusive-or. Each store writes r^r^1, and r^r cancels to   *)
+(* 0 so the value is the constant 1 independent of the load. PwT recognises the      *)
+(* self-xor carries no value flow and ALLOWS the r0=r1=1 outcome.                    *)
+(*                                                                                  *)
+(* wev-smt: dependsReally folds r^r -> 0 so both data edges are isSemantic=false;    *)
+(* evalConst(r^r^1)=1 wires the LB cycle r0=r1=1 faithfully (the paren-free r^r^1     *)
+(* spelling parses cleanly where the |-form would be truncated at the first ')').    *)
+{ }
+ P0                              | P1                              ;
+ r0 = READ_ONCE(*x)              | r1 = READ_ONCE(*y)              ;
+ WRITE_ONCE(*y, r0 ^ r0 ^ 1)     | WRITE_ONCE(*x, r1 ^ r1 ^ 1)     ;
+exists (0:r0=1 /\ 1:r1=1)

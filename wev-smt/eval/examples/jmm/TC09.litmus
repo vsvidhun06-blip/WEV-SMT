@@ -1,0 +1,9 @@
+C TC09
+(* JMM causality test case 9 (Pugh 2004). A data-dependency cycle across two threads  *)
+(* with an extra read: P0 reads y and x and writes y with a value derived from x; P1   *)
+(* has a data dependency x<-y. The value flows around the dep cycle. JMM DECISION:     *)
+(* FORBIDDEN. Encoded thread-locally with the r+1 idiom preserving the real data deps. *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); r1 = READ_ONCE(*x); WRITE_ONCE(*y, r1 + 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, r0 + 1); }
+exists (0:r1=1 /\ 1:r0=1)

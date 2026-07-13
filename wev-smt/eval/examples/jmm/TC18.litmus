@@ -1,0 +1,10 @@
+C TC18
+(* JMM causality test case 18 (Pugh 2004). Three-thread structure: P0 data dep y<-x;   *)
+(* P1 reads y, writes x=1 UNCONDITIONALLY, then writes z from y; P2 data dep x<-z. The  *)
+(* unconditional x=1 on P1 supplies a non-dependent justification. JMM DECISION:        *)
+(* ALLOWED. Encoded with the r+1 idiom on the dependent stores and the explicit x=1.    *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); }
+P1(int *x, int *y, int *z) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, 1); WRITE_ONCE(*z, r0 + 1); }
+P2(int *x, int *z) { r0 = READ_ONCE(*z); WRITE_ONCE(*x, r0 + 1); }
+exists (0:r0=1 /\ 1:r0=1 /\ 2:r0=1)

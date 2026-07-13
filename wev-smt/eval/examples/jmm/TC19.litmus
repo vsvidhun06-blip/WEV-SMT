@@ -1,0 +1,10 @@
+C TC19
+(* JMM causality test case 19 (Pugh 2004). Control dependencies present, but the guard *)
+(* on P0 tests r0==0 (the INITIAL value of y), so P0's store fires from the initial     *)
+(* state, not from a value produced by the cycle -- there is no self-justifying loop.   *)
+(* JMM DECISION: ALLOWED. The exists names P0 reading the initial y=0 and P1 reading    *)
+(* x=1, an ordinary (non-thin-air) execution, wired faithfully.                         *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); if (r0 == 0) ; WRITE_ONCE(*x, 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*x); if (r0 == 1) ; WRITE_ONCE(*y, 1); }
+exists (0:r0=0 /\ 1:r0=1)

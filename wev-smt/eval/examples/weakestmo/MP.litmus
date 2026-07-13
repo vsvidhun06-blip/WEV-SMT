@@ -1,0 +1,10 @@
+C MP
+(* Weakestmo (Chakraborty & Vafeiadis, POPL 2019): message passing with all-relaxed *)
+(* accesses. P0 publishes data (x=1) then a flag (y=1); P1 reads the flag then the   *)
+(* data. With no release/acquire or fence, the reads may observe the flag set (r0=1) *)
+(* while still seeing the stale data (r1=0). Weakestmo ALLOWS relaxed MP.            *)
+{ }
+ P0                    | P1                    ;
+ WRITE_ONCE(*x, 1)     | r0 = READ_ONCE(*y)    ;
+ WRITE_ONCE(*y, 1)     | r1 = READ_ONCE(*x)    ;
+exists (1:r0=1 /\ 1:r1=0)

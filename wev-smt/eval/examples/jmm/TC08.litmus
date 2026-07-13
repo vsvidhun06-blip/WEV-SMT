@@ -1,0 +1,10 @@
+C TC08
+(* JMM causality test case 8 (Pugh 2004). P0 reads x twice and writes y=1 guarded by  *)
+(* if(r0==r1); P1 has a data dependency x<-y. The guard is a control dependency on the *)
+(* x-reads and the feedback closes a cycle. JMM DECISION: FORBIDDEN. LIMITATION: the   *)
+(* parser cannot see that r0==r1 always holds (two reads of the same location), so it   *)
+(* records the two-register guard as ctrl isSemantic=true unconditionally.             *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); r1 = READ_ONCE(*x); if (r0 == r1) ; WRITE_ONCE(*y, 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, r0 + 1); }
+exists (0:r0=1 /\ 1:r0=1)

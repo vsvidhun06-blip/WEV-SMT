@@ -1,0 +1,10 @@
+C TC03
+(* JMM causality test case 3 (Pugh 2004). Load-buffering with a CONTROL dependency  *)
+(* on P0 (store guarded by a branch on the load) and a data dependency on P1. The    *)
+(* guarded store is genuinely control-dependent. JMM DECISION: FORBIDDEN. The wev C  *)
+(* parser flattens the guard to a branch-on-read followed by the store and records   *)
+(* read->store ctrl isSemantic=true.                                                 *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); if (r0 == 1) ; WRITE_ONCE(*x, 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); }
+exists (0:r0=1 /\ 1:r0=1)

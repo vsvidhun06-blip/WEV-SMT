@@ -1,0 +1,10 @@
+C TC06
+(* JMM causality test case 6 (Pugh 2004). Load-buffering data-dependency cycle        *)
+(* (P0 stores x=1, P1 has data dep y<-x) plus an independent third writer P2 storing   *)
+(* y=2. The P0<->P1 data-dependency cycle drives the thin-air question. JMM DECISION:  *)
+(* FORBIDDEN. P2's y=2 is a coherence distractor; the exists names the P0-P1 cycle.    *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); }
+P2(int *y) { WRITE_ONCE(*y, 2); }
+exists (0:r0=1 /\ 1:r0=1)
