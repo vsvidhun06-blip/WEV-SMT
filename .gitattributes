@@ -1,0 +1,20 @@
+# Keep shell scripts LF on every platform: the POPL artifact's reproduce.sh is the
+# Docker image ENTRYPOINT, and a CRLF shebang would fail in the Linux container
+# with "bad interpreter: /usr/bin/env bash^M". Pin LF regardless of core.autocrlf.
+*.sh text eol=lf
+wev-smt/artifact/reproduce.sh text eol=lf
+
+# Dockerfile and Python helpers: keep LF too (defensive; both tolerate CRLF, but
+# the reproduction is Linux-only).
+Dockerfile text eol=lf
+*.py text eol=lf
+
+# Never EOL-normalise the vendored model jar — that would corrupt the binary.
+*.jar binary
+
+# The artifact's expected-output snapshots are diffed (in the Linux container) against
+# LF output that reproduce.sh generates. Force LF so a Windows checkout (core.autocrlf
+# =true) cannot turn them into CRLF and make every diff line spuriously differ.
+wev-smt/artifact/expected-outputs/* text eol=lf
+wev-smt/artifact/README.md text eol=lf
+wev-smt/docs/artifact-guide.md text eol=lf

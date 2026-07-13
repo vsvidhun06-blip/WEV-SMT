@@ -1,0 +1,16 @@
+# Expected Day-14 robustness projection — edge cases A-K.
+# Columns: <id> | <outcome>  (the per-case time/mem column is dropped).
+# Outcomes are structural and deterministic; this is what reproduce.sh diffs.
+# Each case must be HANDLED GRACEFULLY: a correct verdict, a validator
+# rejection, a resource refusal, or a capped timeout -- never a crash or hang.
+A | no witness (no crash)
+B | consistent under all 5 models (no relaxation intra-thread)
+C | rejected by validator (cycle); no crash
+D | rejected by validator (no valid execution exists); no crash
+E | rejected by validator (conflicting initial values); no crash
+F | 192 + 384 events refused by maxEvents ceiling -> empty (no crash)
+G | 20 locations / 4 threads consistent under all 5 models
+H | 32-deep real chain forbidden (thin-air); fake chain allowed
+I | both-semantic forbidden; one-fake allowed (only semantic deps participate)
+J | atomic counter consistent; double-read conflict forbidden (linearizable)
+K | REL/ACQ fences forbid MP under RA; unfenced allowed

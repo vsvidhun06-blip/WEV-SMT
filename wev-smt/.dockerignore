@@ -1,0 +1,32 @@
+# Docker build context = the wev-smt/ subproject (build with
+#   cd wev-smt && docker build -f artifact/Dockerfile -t wev-smt-artifact:adb65a7 .
+# ). Keep the context small and the image deterministic.
+
+# The real litmus corpora (herd7 + Dat3M): hundreds of MB, gitignored, and NOT
+# baked into the image — the optional corpus check mounts them at /corpus instead.
+eval/corpus/
+
+# Throwaway sweep/corpus stdout logs.
+eval/logs/
+
+# Build output and compiled classes — the image rebuilds from source.
+target/
+**/*.class
+
+# Regenerable atlas CSVs written to the working dir by a bare AtlasReconstruct run
+# (reproduce.sh writes fresh copies into eval/ instead).
+consistency-validation.csv
+atlas-separations.csv
+mismatches.txt
+
+# Freshly captured reproduction stdout, if a host run left any behind.
+eval/atlas-stdout.txt
+eval/scalability-fences-stdout.txt
+
+# VCS / IDE noise (the git dir actually lives in the parent repo, listed for safety).
+.git/
+.idea/
+*.iml
+
+# The Python plot cache.
+**/__pycache__/

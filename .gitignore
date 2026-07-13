@@ -1,0 +1,49 @@
+# ── Maven ────────────────────────────────────────────────
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+
+# ── IntelliJ IDEA ────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ── OS ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Java ──────────────────────────────────────────────────
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+
+# Exception: the POPL artifact vendors the visualiser model jar so the Docker image
+# is self-contained (com.weakest:visualising-weakest-executions, dependency-reduced,
+# 218 KB). Force-include it despite the *.jar rule above.
+!wev-smt/artifact/lib/visualising-weakest-executions-1.0-SNAPSHOT.jar
+
+# ── VS Code ───────────────────────────────────────────
+.vscode/
+
+# ── Python (artifact plot scripts) ───────────────────────
+__pycache__/
+*.pyc
+
+# ── Eval debug traces (throwaway sweep/corpus stdout logs) ─
+wev-smt/eval/logs/
+
+# ── AtlasReconstruct generated CSVs (regenerable; the committed record is
+#    eval/atlas-day12-final.txt, the run's captured stdout) ─
+wev-smt/consistency-validation.csv
+wev-smt/atlas-separations.csv
+wev-smt/mismatches.txt
