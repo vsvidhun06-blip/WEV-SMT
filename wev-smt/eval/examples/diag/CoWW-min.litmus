@@ -1,0 +1,5 @@
+C CoWW-min
+{ }
+P0(int *x) { WRITE_ONCE(*x, 1); WRITE_ONCE(*x, 2); }
+P1(int *x) { int r = READ_ONCE(*x); }
+exists (x=1)

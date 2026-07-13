@@ -1,0 +1,530 @@
+%% =====================================================================
+%% WEV-SMT  —  POPL submission (PACMPL)
+%% Title: Distinguishing Semantic from Syntactic Dependencies for
+%%        Thin-Air on a Single Execution
+%%
+%% SCAFFOLD BUILD.  Locked prose is NOT yet inserted: every locked
+%% section appears as a red \TODO box. Tables and figures are REAL
+%% (built from the artifact .md files) and are fully cross-referenced.
+%% Replace each \TODO{...} with the locked verbatim text. Do not edit
+%% the surrounding layout.
+%% =====================================================================
+\documentclass[acmsmall,review,anonymous]{acmart}
+
+%% --- acmart already loads: amsmath, amsfonts, hyperref, booktabs, ---
+%% --- and an amsthm-based theorem package. We add the rest.        ---
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+%% hyperref is provided by acmart — do NOT re-load it (option clash).
+\usepackage{cleveref}   %% must be loaded last
+
+%% --- Theorem environments (per spec). Guarded: acmart predefines    ---
+%% --- theorem/proposition in recent releases, so only declare if     ---
+%% --- the counter does not already exist (keeps the build clean).    ---
+\makeatletter
+\@ifundefined{c@theorem}{\newtheorem{theorem}{Theorem}}{}
+\@ifundefined{c@proposition}{\newtheorem{proposition}{Proposition}}{}
+\makeatother
+
+%% --- Scaffold placeholder for LOCKED prose not yet supplied. -------
+\newcommand{\TODO}[1]{%
+  \par\medskip\noindent
+  \textcolor{red}{\fbox{\parbox{0.95\linewidth}{%
+  \textbf{[LOCKED PROSE — TODO: paste verbatim]}\\[2pt]\small #1}}}%
+  \par\medskip}
+
+%% --- PACMPL boilerplate (review mode tolerates defaults) -----------
+\acmJournal{PACMPL}
+\acmVolume{0}\acmNumber{POPL}\acmArticle{0}\acmYear{2026}\acmMonth{1}
+\settopmatter{printacmref=false}
+\setcopyright{none}
+
+\begin{document}
+
+\title{Distinguishing Semantic from Syntactic Dependencies for Thin-Air
+on a Single Execution}
+
+%% Anonymized for double-blind review.
+\author{Anonymous Author(s)}
+\affiliation{%
+  \institution{Submission for double-blind review}
+  \country{}
+}
+
+\begin{abstract}
+\TODO{Abstract — locked 181-word version.}
+\end{abstract}
+
+\maketitle
+
+%% =====================================================================
+\section{Introduction}
+\label{sec:intro}
+%% Locked ~1,090-word version, 5 movements, Movement 2 at 159 words.
+\TODO{\S1 Introduction — locked ${\sim}1{,}090$-word version, five
+movements (Movement~2 at 159 words). Contribution order C1, C2, C3 must
+be preserved. When inserting, add \texttt{\textbackslash cref} for any
+``\S X'' / ``Theorem~4.X'' references and \texttt{\textbackslash cite}
+for any ``[Author Year]'' citations.}
+
+%% =====================================================================
+\section{Background}
+\label{sec:background}
+\TODO{\S2 Background — NOT in chat. Either paste the user's existing \S2,
+or (with approval) a ${\sim}300$-word section covering: weak memory and
+the C/C++11 thin-air problem~\cite{batty2015problem,boehmAdve2008foundations};
+the per-candidate-execution discipline; and high-level mentions of
+Weakestmo~\cite{chakraborty2019grounding} and
+Promising~\cite{kang2017promising}.}
+
+%% =====================================================================
+\section{The WEAKEST Model and its SMT Encoding}
+\label{sec:model}
+
+\subsection{}
+\label{sec:model-events}
+\TODO{\S3.1 — from the user's existing unified \S3+\S4 draft.}
+
+\subsection{}
+\label{sec:model-consistency}
+\TODO{\S3.2 — from the user's existing draft.}
+
+\subsection{}
+\label{sec:model-coherence}
+\TODO{\S3.3 — from the user's existing draft.}
+
+\subsection{}
+\label{sec:model-jfcoherence}
+%% §3.4 is the LOCKED revised version.
+\TODO{\S3.4 — LOCKED revised version.}
+
+\subsection{}
+\label{sec:model-encoding}
+\TODO{\S3.5 — from the user's existing draft.}
+
+\subsection{}
+\label{sec:model-models}
+\TODO{\S3.6 — from the user's existing draft.}
+
+%% =====================================================================
+\section{Semantic vs.\ Syntactic Dependencies}
+\label{sec:deps}
+
+\subsection{}
+\label{sec:deps-defn}
+%% §4.1 locked, three sub-paragraphs.
+\TODO{\S4.1 — LOCKED, three sub-paragraphs.}
+
+\subsection{The matched pair: LB-real and LB-fake}
+\label{sec:deps-pair}
+%% §4.2 LB-real / LB-fake exposition from the user's draft. Figure 1 below.
+\TODO{\S4.2 — LB-real / LB-fake exposition (from the user's draft).
+Reference \cref{fig:lbpair}.}
+
+\begin{figure}[t]
+\centering
+%% ---- LB-real (left) ----
+\begin{minipage}[t]{0.46\linewidth}\centering
+\begin{tikzpicture}[
+  >={Stealth[round]},
+  ev/.style={font=\small},
+  po/.style={->,thick},
+  rf/.style={->,dashed,bend left=18},
+  sd/.style={->,thick,red!70!black,bend right=32}]
+  \node[ev] (a) at (0,2)   {$a:\ \mathrm{R}\,y$};
+  \node[ev] (b) at (0,0)   {$b:\ \mathrm{W}\,x{=}r_0{+}1$};
+  \node[ev] (c) at (2.4,2) {$c:\ \mathrm{R}\,x$};
+  \node[ev] (d) at (2.4,0) {$d:\ \mathrm{W}\,y{=}r_1{+}1$};
+  \draw[po] (a) -- (b);
+  \draw[po] (c) -- (d);
+  \draw[rf] (b) to node[below,font=\scriptsize] {rf} (c);
+  \draw[rf] (d) to node[above,font=\scriptsize] {rf} (a);
+  \draw[sd] (a) to node[left,font=\scriptsize] {sdep} (b);
+  \draw[sd] (c) to node[right,font=\scriptsize] {sdep} (d);
+\end{tikzpicture}
+\\[2pt]{\small (a) \textsf{LB-real}: $r_0{+}1$, $r_1{+}1$ \\
+data dep \emph{semantic} $\Rightarrow$ WEAKEST \textbf{forbids}}
+\end{minipage}\hfill
+%% ---- LB-fake (right) ----
+\begin{minipage}[t]{0.46\linewidth}\centering
+\begin{tikzpicture}[
+  >={Stealth[round]},
+  ev/.style={font=\small},
+  po/.style={->,thick},
+  rf/.style={->,dashed,bend left=18},
+  sx/.style={->,thick,gray,bend right=32,densely dotted}]
+  \node[ev] (a) at (0,2)   {$a:\ \mathrm{R}\,y$};
+  \node[ev] (b) at (0,0)   {$b:\ \mathrm{W}\,x{=}r_0{\oplus}r_0{\oplus}1$};
+  \node[ev] (c) at (2.4,2) {$c:\ \mathrm{R}\,x$};
+  \node[ev] (d) at (2.4,0) {$d:\ \mathrm{W}\,y{=}r_1{\oplus}r_1{\oplus}1$};
+  \draw[po] (a) -- (b);
+  \draw[po] (c) -- (d);
+  \draw[rf] (b) to node[below,font=\scriptsize] {rf} (c);
+  \draw[rf] (d) to node[above,font=\scriptsize] {rf} (a);
+  \draw[sx] (a) to node[left,font=\scriptsize] {dep ($\notin$ sdep)} (b);
+  \draw[sx] (c) to node[right,font=\scriptsize] {dep ($\notin$ sdep)} (d);
+\end{tikzpicture}
+\\[2pt]{\small (b) \textsf{LB-fake}: $r{\oplus}r{\oplus}1$ \\
+dep \emph{syntactic only} $\Rightarrow$ WEAKEST \textbf{allows}}
+\end{minipage}
+\caption{The matched pair (\cref{sec:deps-pair}). Both candidate
+executions wire the identical $\mathit{po}\cup\mathit{rf}$ shape and the
+same observed values $r_0{=}r_1{=}1$. They differ only in whether the
+read$\to$write data dependency is \emph{semantic}: in \textsf{LB-real}
+the written value depends on the value read, so the edge enters
+$\mathit{sdep}$ and $\mathit{jfCoherence}$ closes the cycle (forbidden);
+in \textsf{LB-fake} the value $r\oplus r\oplus 1$ is constant in $r$, so
+the dependency is syntactic only, excluded from $\mathit{sdep}$, and the
+cycle is admitted (allowed).}
+\label{fig:lbpair}
+\end{figure}
+
+\subsection{}
+\label{sec:deps-classifier}
+%% §4.3 locked with Weakestmo-visibility closing.
+\TODO{\S4.3 — LOCKED, with the Weakestmo-visibility closing sentence.}
+
+\subsection{}
+\label{sec:deps-consistency}
+%% §4.4 WEAKEST-consistency from the user's draft.
+\TODO{\S4.4 — WEAKEST-consistency (from the user's draft).}
+
+\subsection{}
+\label{sec:deps-thm41}
+%% §4.5 locked Theorem 4.1 with supported-syntax-fragment scope.
+\TODO{\S4.5 — LOCKED. State the locked text; wrap the theorem statement
+itself in the \texttt{theorem} environment below and keep \cref{thm:sound}.}
+\begin{theorem}[locked statement — paste verbatim]
+\label{thm:sound}
+\TODO{Theorem 4.1 statement (supported-syntax-fragment scope).}
+\end{theorem}
+
+\subsection{}
+\label{sec:deps-thm42}
+%% §4.6 Theorem 4.2 with three qualifications.
+\TODO{\S4.6 — Theorem 4.2 with its three qualifications.}
+\begin{theorem}[locked statement — paste verbatim]
+\label{thm:complete}
+\TODO{Theorem 4.2 statement.}
+\end{theorem}
+
+\subsection{Hierarchy preservation}
+\label{sec:deps-hierarchy}
+%% §4.7 LOCKED Option C — Theorem 4.3 (SC dominates) + Props 4.4 and 4.5.
+\TODO{\S4.7 — LOCKED Option~C. Insert the locked prose. The three formal
+statements are scaffolded below (\cref{thm:scdom,prop:tsopso,prop:rawk});
+reference \cref{fig:lattice}.}
+\begin{theorem}[SC dominates — locked statement]
+\label{thm:scdom}
+\TODO{Theorem 4.3: every SC-rooted edge (SC\,$\sqsupseteq$\,TSO, PSO, RA,
+WEAKEST) holds by construction.}
+\end{theorem}
+\begin{proposition}[locked statement]
+\label{prop:tsopso}
+\TODO{Proposition 4.4: TSO\,$\not\sqsupseteq$\,PSO (witness
+\texttt{WR-relacq-cex}); the two are incomparable.}
+\end{proposition}
+\begin{proposition}[locked statement]
+\label{prop:rawk}
+\TODO{Proposition 4.5: RA\,$\not\sqsupseteq$\,WEAKEST (witness
+\texttt{LBdep-real}); the two are incomparable.}
+\end{proposition}
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  >={Stealth[round]},
+  m/.style={draw,rounded corners,inner sep=3pt,font=\small},
+  dom/.style={->,thick},
+  ref/.style={dotted,thick,gray}]
+  \node[m] (sc) at (0,2.2) {SC};
+  \node[m] (tso) at (-3,0) {TSO};
+  \node[m] (pso) at (-1,0) {PSO};
+  \node[m] (ra)  at (1,0)  {RA};
+  \node[m] (wk)  at (3.2,0) {WEAKEST};
+  % SC dominates each weak model (by construction)
+  \draw[dom] (sc) -- (tso);
+  \draw[dom] (sc) -- (pso);
+  \draw[dom] (sc) -- (ra);
+  \draw[dom] (sc) -- (wk);
+  % Refuted intermediate edges (Props 4.4, 4.5): dotted with a cross.
+  \draw[ref] (tso) -- node[pos=0.5] {$\times$}
+             node[below=2pt,font=\scriptsize,black] {Prop.~\ref{prop:tsopso}} (pso);
+  \draw[ref] (ra) -- node[pos=0.5] {$\times$}
+             node[below=2pt,font=\scriptsize,black] {Prop.~\ref{prop:rawk}} (wk);
+\end{tikzpicture}
+\caption{The encoded model lattice (\cref{sec:deps-hierarchy}). Solid
+arrows are by-construction domination (\cref{thm:scdom}). SC sits above a
+layer of four \emph{mutually incomparable} weak models; the dotted
+crossed edges mark the two refuted intermediate containments
+(\cref{prop:tsopso,prop:rawk}). There are no arrows between weak models.}
+\label{fig:lattice}
+\end{figure}
+
+%% =====================================================================
+\section{Implementation}
+\label{sec:impl}
+%% Locked ~1,050-word version with five subsections.
+\subsection{}
+\label{sec:impl-1}
+\TODO{\S5.1 — LOCKED.}
+
+\subsection{The ten dependency patterns}
+\label{sec:impl-patterns}
+\TODO{\S5.2 — LOCKED. Insert prose; the ten-pattern table is
+\cref{tab:patterns}. (The locked text supplies the pattern names and
+descriptions — paste them into the tabular below, replacing the
+placeholder rows.)}
+
+\begin{table}[t]
+\caption{The ten semantic-dependency patterns (\cref{sec:impl-patterns}).
+Rows are placeholders pending the locked \S5.2 text.}
+\label{tab:patterns}
+\begin{tabular}{cll}
+\toprule
+\# & Pattern & Classification \\
+\midrule
+1  & \emph{[locked]} & \emph{[locked]} \\
+2  & \emph{[locked]} & \emph{[locked]} \\
+3  & \emph{[locked]} & \emph{[locked]} \\
+4  & \emph{[locked]} & \emph{[locked]} \\
+5  & \emph{[locked]} & \emph{[locked]} \\
+6  & \emph{[locked]} & \emph{[locked]} \\
+7  & \emph{[locked]} & \emph{[locked]} \\
+8  & \emph{[locked]} & \emph{[locked]} \\
+9  & \emph{[locked]} & \emph{[locked]} \\
+10 & \emph{[locked]} & \emph{[locked]} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{}
+\label{sec:impl-3}
+\TODO{\S5.3 — LOCKED.}
+
+\subsection{}
+\label{sec:impl-4}
+\TODO{\S5.4 — LOCKED.}
+
+\subsection{}
+\label{sec:impl-5}
+\TODO{\S5.5 — LOCKED.}
+
+%% =====================================================================
+\section{Evaluation}
+\label{sec:eval}
+
+\subsection{Setup}
+\label{sec:eval-setup}
+%% Locked ~310-word setup.
+\TODO{\S6.1 — LOCKED ${\sim}310$-word setup.}
+
+\subsection{Hierarchy preservation}
+\label{sec:eval-hierarchy}
+%% Locked ~100-word hierarchy preservation observation.
+\TODO{\S6.2 — LOCKED ${\sim}100$-word hierarchy-preservation observation
+(0 violations across 2{,}998 fully-validated files).}
+
+\subsection{Ablating the dependency classifier}
+\label{sec:eval-ablation}
+%% Locked ablation paragraph + tables.
+\TODO{\S6.3 — LOCKED ablation paragraph. Reference
+\cref{tab:ablation,tab:batty}.}
+
+\begin{table}[t]
+\caption{$\mathit{sdep}$ ablation on the WEAKEST checker
+(\cref{sec:eval-ablation}). Each cell is
+(\#ALLOWED, \#FORBIDDEN, \#TIMEOUT, \#ERROR) and cell wall-clock. The
+shipped detector (\textbf{current}) is the only configuration that allows
+every fake-dependency LB and forbids every real-dependency LB.}
+\label{tab:ablation}
+\begin{tabular}{lcccc}
+\toprule
+Config & LB-fake (4) & LB-real (4) & 3-thread (3) & corpus-slice (200) \\
+\midrule
+\textbf{none}              & (4,0,0,0) 358\,ms$^{*}$ & (4,0,0,0) 73\,ms & (3,0,0,0) 95\,ms & (194,6,0,0) 3474\,ms \\
+\textbf{all-deps-semantic} & (1,3,0,0) 64\,ms        & (0,4,0,0) 63\,ms & (3,0,0,0) 50\,ms & (194,6,0,0) 3207\,ms \\
+\textbf{current}           & (4,0,0,0) 66\,ms        & (0,4,0,0) 59\,ms & (3,0,0,0) 33\,ms & (194,6,0,0) 3003\,ms \\
+\bottomrule
+\end{tabular}
+\\[2pt]{\footnotesize $^{*}$ Absorbs JVM + first Z3-context warm-up; max
+single solve across the run was 49\,ms.}
+\end{table}
+
+\begin{table}[t]
+\caption{Batty et al.\ \S4 control-dependency control examples
+(\cref{sec:eval-ablation}). Cell = verdict.}
+\label{tab:batty}
+\begin{tabular}{lcc}
+\toprule
+Config & \texttt{LB+ctrldata+ctrl-double} & \texttt{LB+ctrldata+ctrl-single} \\
+\midrule
+\textbf{none}              & ALLOWED   & ALLOWED   \\
+\textbf{all-deps-semantic} & FORBIDDEN & FORBIDDEN \\
+\textbf{current}           & \textbf{FORBIDDEN} & \textbf{FORBIDDEN} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cross-checking against herd7}
+\label{sec:eval-herd7}
+%% Locked herd7 baseline + tables + co4/co10 diagnosis.
+\TODO{\S6.4 — LOCKED herd7 baseline paragraph, plus the co4/co10 diagnosis
+(loader coherence-order wiring limitation, not an unsoundness; see
+\texttt{co4\_co10\_diagnosis.md}). Reference \cref{tab:sc,tab:tso}.}
+
+\begin{table}[t]
+\caption{SC agreement: herd7 \texttt{sc.cat} vs.\ WEV-SMT \texttt{SC}
+(\cref{sec:eval-herd7}).}
+\label{tab:sc}
+\begin{tabular}{lrrrrrr}
+\toprule
+Arch & files & herd7 ERR & comparable & agree & disagree & agree \% \\
+\midrule
+X86   & 51  & 1   & 50  & 42  & 8   & 84\% \\
+PPC   & 60  & 1   & 59  & 51  & 8   & 86\% \\
+C     & 11  & 2   & 9   & 9   & 0   & 100\% \\
+RISCV & 5   & 0   & 5   & 4   & 1   & 80\% \\
+ARM   & 570 & 210 & 360 & 138 & 222 & 38\% \\
+\midrule
+\textbf{non-ARM total} & 127 & 4 & \textbf{123} & \textbf{106} & 17 & \textbf{86.2\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\caption{TSO agreement: herd7 \texttt{x86tso.cat} vs.\ WEV-SMT
+\texttt{TSO}, X86 only (\cref{sec:eval-herd7}).}
+\label{tab:tso}
+\begin{tabular}{lrrrrrr}
+\toprule
+Arch & files & herd7 ERR & comparable & agree & disagree & agree \% \\
+\midrule
+X86 & 51 & 5 & \textbf{46} & \textbf{34} & 12 & 74\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Parser coverage}
+\label{sec:eval-parser}
+%% Locked parser-failure paragraph + table.
+\TODO{\S6.5 — LOCKED parser-failure paragraph (24.3\% coverage:
+2{,}998 of 12{,}324). Reference \cref{tab:skips,tab:perrors}.}
+
+\begin{table}[t]
+\caption{Syntax-skip feature buckets (\cref{sec:eval-parser}); sum
+$=7{,}461$.}
+\label{tab:skips}
+\begin{tabular}{lrr l}
+\toprule
+Bucket (failure feature) & $n$ & \% skips & Orthogonality \\
+\midrule
+ALU / register-setup syntax            & 2784 & 37.3\% & trigger-orth., content-biased \\
+Control-flow labels \& branches        & 1175 & 15.7\% & trigger-orth., content-biased \\
+Unbound base-register addressing       & 1023 & 13.7\% & mostly orthogonal \\
+ARM Memory-Tagging (MTE)               & 937  & 12.6\% & orthogonal \\
+Unsupported architecture header        & 852  & 11.4\% & orthogonal / out-of-scope \\
+Other system / misc                    & 317  & 4.2\%  & mostly orthogonal \\
+C declarations / types                 & 118  & 1.6\%  & orthogonal \\
+Function-call / lock constructs        & 107  & 1.4\%  & orthogonal \\
+RMW / LL-SC atomics                    & 64   & 0.9\%  & coherence-relevant (small) \\
+SIMD / SVE / SME / FP / sysreg         & 63   & 0.8\%  & orthogonal \\
+C array / pointer addressing           & 15   & 0.2\%  & orthogonal \\
+Fence-syntax variant (\texttt{fence.tso}) & 2 & 0.0\%  & orthogonal (near-empty) \\
+\emph{re-parsed OK (empty \texttt{exists})} & 4 & 0.1\% & n/a \\
+\midrule
+\textbf{Total} & \textbf{7461} & 100\% & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\caption{Parse-error exception buckets (\cref{sec:eval-parser}); sum
+$=1{,}865$.}
+\label{tab:perrors}
+\begin{tabular}{lrr l}
+\toprule
+Bucket (exception + trigger) & $n$ & \% PE & Orthogonality \\
+\midrule
+\texttt{no-init-block} (malformed preamble) & 935  & 50.1\% & trigger-orth.; content mixed \\
+\texttt{NumberFormatException} (oversized hex) & 694 & 37.2\% & out-of-scope (mixed-size) \\
+\texttt{bad-proc-header}                     & 236  & 12.7\% & orthogonal \\
+\midrule
+\textbf{Total} & \textbf{1865} & 100\% & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%% =====================================================================
+\section{Related Work}
+\label{sec:related}
+%% Eleven paragraphs from section7_drafts_v3.md, in THIS order (do not
+%% alphabetize): RC11, Weakestmo (v3), Promising, Batty (Option B
+%% rewrite), Boehm & Demsky, IMM, Raad, GenMC, TruSt (folded into GenMC
+%% as one sentence), Dat3M, Herding Cats, SMT-based reasoning.
+\TODO{\S7 Related Work — eleven paragraphs from
+\texttt{section7\_drafts\_v3.md} (NOT on disk — supply it). Required
+order: RC11~\cite{lahav2017repairing}; Weakestmo (v3)~\cite{chakraborty2019grounding};
+Promising~\cite{kang2017promising}; Batty (Option~B
+rewrite)~\cite{batty2015problem}; Boehm \& Demsky~\cite{boehmDemsky2014outlawing};
+IMM~\cite{podkopaev2019bridging}; Raad~\cite{raad2019library};
+GenMC~\cite{kokologiannakis2019model} (fold
+TruSt~\cite{kokologiannakis2022trust} in as one sentence per the
+senior-PC review); Dat3M~\cite{gavrilenko2019bmc}; Herding
+Cats~\cite{alglave2014herding}; SMT-based reasoning. Do NOT alphabetize.}
+
+%% =====================================================================
+\section{Discussion}
+\label{sec:discussion}
+%% Locked ~810-word version with both nits applied (CoWW/CoWR family
+%% wording; three-mechanisms-agree softened to literature-based).
+\TODO{\S8 Discussion — LOCKED ${\sim}810$-word version with both nits
+applied (the CoWW/CoWR family wording; the ``three mechanisms agree''
+claim softened to literature-based).}
+
+%% =====================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+%% Fresh two-paragraph conclusion (drafted, NOT locked — clearly marked).
+\textcolor{blue}{\small[DRAFTED, not locked — \cref{sec:conclusion}. Edit
+freely; does not recap empirical results, per the brief.]}\par\smallskip
+We have argued that out-of-thin-air behaviour can be ruled out on a single
+candidate execution, without an event-structure construction, by
+distinguishing \emph{semantic} from \emph{syntactic} dependencies. The
+matched pair \textsf{LB-real}/\textsf{LB-fake}
+(\cref{sec:deps-pair,fig:lbpair}) isolates exactly this distinction: two
+executions with an identical $\mathit{po}\cup\mathit{rf}$ shape and
+identical observed values that differ only in whether the read-to-write
+dependency carries information. Stratifying syntactic dependencies into
+the semantic sub-relation $\mathit{sdep}$, and forbidding cycles in
+$\mathit{sdep}\cup\mathit{jf}$ through the $\mathit{jfCoherence}$ axiom,
+yields a no-thin-air condition that is SMT-encodable and decidable on a
+per-execution basis. We have implemented this condition and exercised it
+on 2{,}998 supported-syntax litmus tests.
+
+We are deliberately narrow about what this establishes. We claim no formal
+correspondence with Weakestmo or with the Promising semantics: our
+condition is motivated by the same grounding intuition but is not proved
+equivalent to either, and we give no mechanized proof of soundness. Our
+results hold for a word-sized, supported-syntax fragment, and the
+dependency classifier is a finite pattern set rather than a complete
+analysis. The natural next steps follow from these limits: a mechanized
+proof relating $\mathit{jfCoherence}$ to an event-structure semantics; a
+loader that enumerates candidate executions rather than wiring a single
+one; and a fuller front-end that admits the architectural dependency and
+control-dependency tests the current parser skips.
+
+%% =====================================================================
+%% Scaffold-only: \nocite{*} forces every refs.bib entry to render so the
+%% bibliography compiles end-to-end before the \cite-bearing prose lands.
+%% REMOVE once §1–§8 prose (with real \cite commands) is inserted.
+\nocite{*}
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{refs}
+
+\end{document}
