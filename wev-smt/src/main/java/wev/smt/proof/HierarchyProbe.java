@@ -109,6 +109,7 @@ public final class HierarchyProbe {
                 case "PSO" -> ax.consistencyPSO();
                 case "RA" -> ax.consistencyRA();
                 case "WEAKEST" -> ax.consistencyWEAKEST();
+                case "RC11" -> ax.consistencyRC11();
                 default -> throw new IllegalStateException(model);
             };
             try (ProverEnvironment p = c.newProverEnvironment()) {

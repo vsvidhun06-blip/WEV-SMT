@@ -27,8 +27,9 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Runs the RC11 thin-air baseline model — {@link AxiomaticConsistency#consistencyRC11ThinAir},
- * the sole axiom {@code acyclic(po ∪ rf)} — over the load-buffering family and reports a
+ * Runs the RC11 thin-air baseline model — {@link AxiomaticConsistency#consistencyRC11},
+ * whose distinguishing axiom {@code acyclic(po ∪ rf)} sits on the shared per-location
+ * coherence + RMW-atomicity base — over the load-buffering family and reports a
  * per-test {@code ALLOWED} / {@code FORBIDDEN} verdict, also written to {@code rc11-results.csv}.
  *
  * <p>Tests: the three paper §4 worked examples under {@code eval/examples/paper}
@@ -89,7 +90,7 @@ public final class Rc11ThinAirRun {
                 BooleanFormula wf = enc.encodeWellFormedness();
                 boolean unsat;
                 try (ProverEnvironment pr = ctx.newProverEnvironment()) {
-                    pr.addConstraint(bmgr.and(wf, ax.consistencyRC11ThinAir()));
+                    pr.addConstraint(bmgr.and(wf, ax.consistencyRC11()));
                     unsat = pr.isUnsat();
                 }
                 String verdict = unsat ? "FORBIDDEN" : "ALLOWED";

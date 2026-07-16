@@ -228,6 +228,7 @@ public final class AtlasReconstruct {
             case PSO -> ax.consistencyPSO();
             case RA -> ax.consistencyRA();
             case WEAKEST -> ax.consistencyWEAKEST();
+            case RC11 -> ax.consistencyRC11();
         };
     }
 

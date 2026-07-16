@@ -89,8 +89,10 @@ public final class AxiomaticConsistency {
     public BooleanFormula consistencySC() { return consistencySC(noGate()); }
     public BooleanFormula consistencyTSO() { return consistencyTSO(noGate()); }
     public BooleanFormula consistencyPSO() { return consistencyPSO(noGate()); }
+    public BooleanFormula consistencyPSOCanonical() { return consistencyPSOCanonical(noGate()); }
     public BooleanFormula consistencyRA() { return consistencyRA(noGate()); }
     public BooleanFormula consistencyWEAKEST() { return consistencyWEAKEST(noGate()); }
+    public BooleanFormula consistencyRC11() { return consistencyRC11(noGate()); }
 
     // ── Gated consistency (one source of truth for sub-executions too) ─────
 
@@ -132,6 +134,35 @@ public final class AxiomaticConsistency {
         // sw edge enters hb, so CO-MP / MP-relacq become hb;eco (one eco segment) and
         // are forbidden, while plain relaxed MP keeps two eco segments and is allowed.
         cs.add(irreflexiveHbEco(active));
+        return bmgr.and(cs);
+    }
+
+    /**
+     * True SPARC PSO (the canonical Total-Store-then-Partial-Store model): exactly
+     * {@link #consistencyPSO} <em>without</em> the {@link #irreflexiveHbEco} conjunct.
+     *
+     * <p>The ppo layer here is {@code po \ (W→R ∪ W→W same-thread)} unioned with
+     * {@code rfe ∪ co ∪ fr} and per-location coherence — the pure SPARC PSO relaxation,
+     * which drains both the store→load and store→store forwarding a partial store buffer
+     * permits. It deliberately drops the RC11 release/acquire term {@code irreflexive(hb;
+     * eco?)} that {@link #consistencyPSO} adds (Pass 2c): that term reintroduces ordering
+     * for release/acquire-synchronised cross-location {@code W→R} pairs (CO-MP /
+     * MP-relacq), which canonical SPARC PSO — having no release/acquire fragment — does
+     * <em>not</em> preserve. So on synchronised store-buffering shapes this model is
+     * strictly weaker than our PSO (it ALLOWS where PSO FORBIDS); on everything the ppo
+     * layer already orders, the two coincide.
+     */
+    public BooleanFormula consistencyPSOCanonical(Function<Event, BooleanFormula> active) {
+        Map<Event, IntegerFormula> layer = freshLayer("psocanon");
+        List<BooleanFormula> cs = new ArrayList<>();
+        addPo(cs, layer, true, true, active);
+        addRf(cs, layer, true, false, active);
+        addCo(cs, layer, active);
+        addFr(cs, layer, active);
+        cs.add(coherencePerLocation(active));
+        cs.add(rmwAtomicity(active));
+        // No irreflexiveHbEco: canonical SPARC PSO keeps only ppo ∪ rfe ∪ co ∪ fr acyclic
+        // plus per-location coherence — no RC11 release/acquire hb;eco cross-location W→R.
         return bmgr.and(cs);
     }
 
@@ -179,6 +210,49 @@ public final class AxiomaticConsistency {
         }
         cs.add(coherencePerLocation(active));
         cs.add(jfCoherence(active));
+        cs.add(rmwAtomicity(active));
+        return bmgr.and(cs);
+    }
+
+    /**
+     * RC11 thin-air baseline (paper §6.4): {@code acyclic(po ∪ rf)} over the shared base
+     * of {@link #coherencePerLocation} and {@link #rmwAtomicity}.
+     *
+     * <p>RC11 repairs the SC-DRF gap left open by C/C++11 by <em>syntactically</em>
+     * forbidding every {@code sb ∪ rf} cycle — {@code acyclic(po ∪ rf)} (Lahav,
+     * Vafeiadis, Kang, Hur &amp; Dreyer, "Repairing Sequential Consistency in C/C++11",
+     * PLDI 2017, §4, the no-thin-air axiom). This kills load-buffering unconditionally:
+     * it makes no distinction between a cycle carried by a genuine data/address/control
+     * dependency (a real thin-air read) and one carried by a fake/identity dependency
+     * that a compiler would optimise away. Encoded exactly like SC's acyclicity but over
+     * {@code po ∪ rf} only (no {@code co}/{@code fr} in the layer): a single fresh integer
+     * layer, {@code addPo} with no W→R / W→W relaxation and {@code addRf} over all rf
+     * edges, forcing {@code layer(a) < layer(b)} on each base edge — a strict order admits
+     * no cycle, so this is precisely {@code irreflexive((po ∪ rf)⁺)}.
+     *
+     * <p><b>Contrast with WEAKEST.</b> {@link #consistencyWEAKEST} replaces this blanket
+     * {@code po} term with the dependency-sensitive {@link #jfCoherence}
+     * ({@code acyclic(sdep ∪ jf)}), which only closes a cycle through <em>semantic</em>
+     * dependency edges. On grounded LB (fake/identity deps) WEAKEST finds no {@code sdep}
+     * edge and permits the execution, whereas RC11's {@code po} term still forbids it —
+     * the exact divergence documented in §6.4. On real thin-air (genuine deps closing the
+     * cycle) both forbid, since the {@code sdep} edges coincide with the {@code po} edges
+     * that carry the value.
+     *
+     * <p>This is a deliberately simplified RC11: our litmus format carries no
+     * release/acquire annotations, so we omit RC11's {@code irreflexive(hb ; eco?)}
+     * release/acquire coherence and its SC-fence axiom, keeping only the no-thin-air axiom
+     * that this comparison turns on. Per-location coherence and RMW atomicity are the same
+     * shared base every model enforces.
+     */
+    public BooleanFormula consistencyRC11(Function<Event, BooleanFormula> active) {
+        Map<Event, IntegerFormula> layer = freshLayer("rc11");
+        List<BooleanFormula> cs = new ArrayList<>();
+        // acyclic(po ∪ rf): full program order (no W→R / W→W relaxation) unioned with all
+        // reads-from, in ONE layer — RC11's syntactic no-thin-air repair.
+        addPo(cs, layer, false, false, active);
+        addRf(cs, layer, false, false, active);
+        cs.add(coherencePerLocation(active));
         cs.add(rmwAtomicity(active));
         return bmgr.and(cs);
     }

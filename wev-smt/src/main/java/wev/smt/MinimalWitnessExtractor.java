@@ -364,6 +364,7 @@ public final class MinimalWitnessExtractor {
             case PSO -> axioms.consistencyPSO(active);
             case RA -> axioms.consistencyRA(active);
             case WEAKEST -> axioms.consistencyWEAKEST(active);
+            case RC11 -> axioms.consistencyRC11(active);
         };
     }
 

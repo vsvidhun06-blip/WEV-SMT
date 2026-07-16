@@ -51,7 +51,7 @@ public final class ParseDump {
             System.out.println("programOrder (id -> [successors]): " + es.getProgramOrder());
             System.out.println("coherenceOrder (loc -> [ids]):     " + es.getCoherenceOrder());
             System.out.print("verdicts: ");
-            for (String m : new String[]{"SC", "TSO", "PSO", "RA", "WEAKEST"}) {
+            for (String m : new String[]{"SC", "TSO", "PSO", "RA", "WEAKEST", "RC11"}) {
                 System.out.print(m + "=" + (decideUnsat(es, lc.deps(), m) ? "FORBID " : "allow "));
             }
             System.out.println("\n");
@@ -74,6 +74,7 @@ public final class ParseDump {
                 case "PSO" -> ax.consistencyPSO();
                 case "RA" -> ax.consistencyRA();
                 case "WEAKEST" -> ax.consistencyWEAKEST();
+                case "RC11" -> ax.consistencyRC11();
                 default -> throw new IllegalStateException(model);
             };
             try (ProverEnvironment pe = c.newProverEnvironment()) {

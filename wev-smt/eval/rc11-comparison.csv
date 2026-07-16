@@ -1,0 +1,13 @@
+test,model,verdict,witness_size,notes
+LB-fake-xor,RC11,ALLOWED,6,"fake-dep(degenerate-parse); events=6; sdepEdges=0; cycleWired=false; readsAtValue1=0/2; DEGENERATE-PARSE(no LB cycle wired)"
+LB-fake-xor,WEAKEST,ALLOWED,6,"fake-dep(degenerate-parse); events=6; sdepEdges=0; cycleWired=false; readsAtValue1=0/2; DEGENERATE-PARSE(no LB cycle wired)"
+LB-fake-xor-cycle,RC11,FORBIDDEN,-,"fake-dep; events=6; sdepEdges=0; cycleWired=true; readsAtValue1=2/2"
+LB-fake-xor-cycle,WEAKEST,ALLOWED,6,"fake-dep; events=6; sdepEdges=0; cycleWired=true; readsAtValue1=2/2"
+LBfd,RC11,FORBIDDEN,-,"fake-dep; events=6; sdepEdges=0; cycleWired=true; readsAtValue1=2/2"
+LBfd,WEAKEST,ALLOWED,6,"fake-dep; events=6; sdepEdges=0; cycleWired=true; readsAtValue1=2/2"
+LB-real,RC11,FORBIDDEN,-,"real-dep(thin-air); events=6; sdepEdges=2; cycleWired=true; readsAtValue1=2/2"
+LB-real,WEAKEST,FORBIDDEN,-,"real-dep(thin-air); events=6; sdepEdges=2; cycleWired=true; readsAtValue1=2/2"
+LB+datas,RC11,ALLOWED,5,"fake-dep(degenerate-parse); events=5; sdepEdges=0; cycleWired=false; readsAtValue1=0/2; DEGENERATE-PARSE(no LB cycle wired)"
+LB+datas,WEAKEST,ALLOWED,5,"fake-dep(degenerate-parse); events=5; sdepEdges=0; cycleWired=false; readsAtValue1=0/2; DEGENERATE-PARSE(no LB cycle wired)"
+DETOUR0236,RC11,FORBIDDEN,-,"fake-dep; events=9; sdepEdges=0; cycleWired=true; readsAtValue1=3/3"
+DETOUR0236,WEAKEST,ALLOWED,9,"fake-dep; events=9; sdepEdges=0; cycleWired=true; readsAtValue1=3/3"
