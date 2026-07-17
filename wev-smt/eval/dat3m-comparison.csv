@@ -1,0 +1,42 @@
+test,wev_verdict,wev_time_ms,dat3m_model,dat3m_verdict,dat3m_time_ms,agree,disagreement_class,notes
+paper/LB+ctrldata+ctrl-double,FORBIDDEN,36,LKMM (linux-kernel.cat),FORBIDDEN,628,true,,both forbid
+paper/LB+ctrldata+ctrl-single,FORBIDDEN,9,LKMM (linux-kernel.cat),FORBIDDEN,531,true,,both forbid
+paper/LB-fake-xor-cycle,ALLOWED,10,LKMM (linux-kernel.cat),FORBIDDEN,794,false,semantic_vs_syntactic_dep,fake data dep r^r; WEAKEST semantically cancels (no sdep) => allows LB; LKMM counts the syntactic data dep => forbids.
+paper/LB-fake-xor,ALLOWED,10,LKMM (linux-kernel.cat),FORBIDDEN,436,false,semantic_vs_syntactic_dep,"fake data dep r^r; WEAKEST cancels, LKMM syntactic dep forbids."
+paper/LB-real,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,460,true,,both forbid
+paper/LBfd,ALLOWED,10,LKMM (linux-kernel.cat),FORBIDDEN,474,false,semantic_vs_syntactic_dep,"fake linear dep r+1-r (=1); WEAKEST linear-cancels (coeff 0), LKMM sees a syntactic data dep and forbids."
+paper/MP+dmb.sy+addr,ALLOWED,9,AArch64 (aarch64.cat),FORBIDDEN,460,false,semantic_vs_syntactic_dep,"fake ADDRESS dep (EOR r,r,r); WEAKEST cancels => MP allowed; AArch64 addr-dep is syntactic => ordered, MP forbidden. AArch64 test reformatted (reg-init->MOV, W->X regs)."
+jmm/TC01,ALLOWED,38,LKMM (linux-kernel.cat),ALLOWED,516,true,,both allow
+jmm/TC02,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,500,true,,both forbid
+jmm/TC03,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,536,true,,both forbid
+jmm/TC04,FORBIDDEN,11,LKMM (linux-kernel.cat),FORBIDDEN,534,true,,both forbid
+jmm/TC05,FORBIDDEN,11,LKMM (linux-kernel.cat),FORBIDDEN,522,true,,both forbid
+jmm/TC06,ALLOWED,12,LKMM (linux-kernel.cat),FORBIDDEN,528,false,wev_value_abstraction,"WEV evalConst models P1 store y=r0+1 as constant 1 (loaded value->0), so a y=1 write exists and the wired candidate is consistent => ALLOWED; Dat3M computes real values: y=1 requires P1 read x=0, contradicting exists 1:r0=1 => FORBIDDEN (matches JMM). See eval/tc06-analysis.md."
+jmm/TC07,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,652,true,,both forbid
+jmm/TC08,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,610,true,,both forbid
+jmm/TC09,FORBIDDEN,11,LKMM (linux-kernel.cat),FORBIDDEN,555,true,,both forbid
+jmm/TC10,FORBIDDEN,11,LKMM (linux-kernel.cat),FORBIDDEN,468,true,,both forbid
+jmm/TC11,ALLOWED,9,LKMM (linux-kernel.cat),ALLOWED,555,true,,both allow
+jmm/TC12,ALLOWED,10,LKMM (linux-kernel.cat),ALLOWED,617,true,,both allow
+jmm/TC13,FORBIDDEN,10,LKMM (linux-kernel.cat),ALLOWED,570,false,wev_fixed_co_order,"reverse case: WEV wires a single co order (init,y=1,y=2) making the two reads r0=2,r1=1 a CoRR violation => FORBIDDEN; the outcome is consistent under co (init,y=2,y=1), which Dat3M finds (co is existential) => ALLOWED. WEV single-candidate co limitation (cf. eval/co-enumeration-results.csv)."
+jmm/TC14,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,585,true,,both forbid
+jmm/TC15,ALLOWED,11,LKMM (linux-kernel.cat),ALLOWED,510,true,,both allow
+jmm/TC16,ALLOWED,11,LKMM (linux-kernel.cat),FORBIDDEN,592,false,wev_value_abstraction,"WEV: no write of value 2 to y/z (data-dep stores modeled as 0), reads default to init => degenerate ALLOWED; Dat3M propagates concrete values through x->y->z->x and forbids the thin-air chain."
+jmm/TC17,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,606,true,,both forbid
+jmm/TC18,ALLOWED,11,LKMM (linux-kernel.cat),FORBIDDEN,507,false,wev_value_abstraction,"WEV: P1 store x=1 is constant (no sdep) so the dependency cycle is broken => ALLOWED; Dat3M: exists needs P1 read y=1 but y in {0,2} (y=r0+1 real) => value-unreachable => FORBIDDEN."
+jmm/TC19,ALLOWED,10,LKMM (linux-kernel.cat),ALLOWED,515,true,,both allow
+jmm/TC20,FORBIDDEN,9,LKMM (linux-kernel.cat),FORBIDDEN,561,true,,both forbid
+weakestmo/CoRR,FORBIDDEN,37,LKMM (linux-kernel.cat),FORBIDDEN,547,true,,both forbid
+weakestmo/CoRW,FORBIDDEN,9,LKMM (linux-kernel.cat),FORBIDDEN,484,true,,both forbid
+weakestmo/CoWR,FORBIDDEN,9,LKMM (linux-kernel.cat),FORBIDDEN,438,true,,both forbid
+weakestmo/LB+ctrl,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,507,true,,both forbid
+weakestmo/LB,ALLOWED,13,LKMM (linux-kernel.cat),ALLOWED,467,true,,both allow
+weakestmo/LBd,FORBIDDEN,9,LKMM (linux-kernel.cat),FORBIDDEN,476,true,,both forbid
+weakestmo/MP,ALLOWED,9,LKMM (linux-kernel.cat),ALLOWED,461,true,,both allow
+weakestmo/OOTA,FORBIDDEN,9,LKMM (linux-kernel.cat),FORBIDDEN,428,true,,both forbid
+leaky-semicolon/LB,ALLOWED,39,LKMM (linux-kernel.cat),ALLOWED,444,true,,both allow
+leaky-semicolon/LBcd,FORBIDDEN,11,LKMM (linux-kernel.cat),FORBIDDEN,518,true,,both forbid
+leaky-semicolon/LBd,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,432,true,,both forbid
+leaky-semicolon/LBfc,FORBIDDEN,10,LKMM (linux-kernel.cat),FORBIDDEN,524,true,,both forbid
+leaky-semicolon/LBfd,ALLOWED,9,LKMM (linux-kernel.cat),FORBIDDEN,494,false,semantic_vs_syntactic_dep,"fake linear dep r+1-r; WEAKEST cancels, LKMM syntactic forbids (same as paper/LBfd)."
+leaky-semicolon/LBxor,ALLOWED,10,LKMM (linux-kernel.cat),FORBIDDEN,460,false,semantic_vs_syntactic_dep,"fake dep r^r^1 (=1); WEAKEST cancels, LKMM syntactic data dep forbids."

@@ -69,11 +69,6 @@ public final class LitmusCorpus {
     private static final MemoryOrder REL = MemoryOrder.RELEASE;
     private static final MemoryOrder SC  = MemoryOrder.SC;
 
-    /**
-     * The full catalogue of ~25 canonical tests. Resets the global event-id counter
-     * once at entry so ids are deterministic, then lets them accumulate so every
-     * event across every case carries a globally-unique id.
-     */
     public static List<LitmusCase> classics() {
         Event.resetCounter();
         List<LitmusCase> cs = new ArrayList<>();
@@ -106,12 +101,7 @@ public final class LitmusCorpus {
         cs.add(c("3.SB", build3SB(), exp(F, U, U, U, A)));
 
         // ── No-dependency LB shapes (Pass 3 Stage 2 expectation correction) ───
-        // These were placeholders wiring the bare LB structure (no dependency edges)
-        // yet expecting FORBIDDEN under every model. The (…,F,F) under RA/WEAKEST was
-        // an artifact of the old well-formedness rf-forward lock (docs/pass-3-plan.md
-        // §3), not a model verdict: a dependency-free LB shape is ALLOWED under bare RA
-        // and WEAKEST. Genuine OOTA forbidding now comes from the semantic-dependency
-        // cases LBdep-real/LBdep-addr, so these are corrected to (F,F,F,A,A) = LB.
+
         cs.add(c("LB-fake-dep", buildLB(RLX, RLX), exp(F, F, F, A, A)));
         cs.add(c("OOTA-cycle",  buildLB(RLX, RLX), exp(F, F, F, A, A)));
 
@@ -121,14 +111,8 @@ public final class LitmusCorpus {
         cs.add(c("MP-relacq", buildMP(REL, ACQ), exp(F, F, F, F, U)));
         cs.add(c("LB-acqrel", buildLB(REL, ACQ), exp(F, F, F, U, A)));
 
-        // ── Pass 3 (Stage 2): dependency-carrying LB variants ─────────────────
+        // ── Pass 3 (Stage 2): dependency-carrying LB variants 
         // The Stage-2 jf-coherence axiom (AxiomaticConsistency.jfCoherence) separates
-        // these by dependency content. All three share LB's structure, so SC/TSO/PSO
-        // forbid them (preserved R→W) and bare RA allows them (no thin-air axiom); only
-        // WEAKEST distinguishes. LBdep-fake's dependency is the identity (isSemantic=
-        // false) ⇒ no real cycle ⇒ ALLOWED under WEAKEST; LBdep-real/LBdep-addr carry a
-        // real (semantic) dependency ⇒ thin-air cycle ⇒ FORBIDDEN under WEAKEST.
-        EsDeps lbFake = buildLBFakeDep();
         cs.add(c("LBdep-fake", lbFake.es(), exp(F, F, F, A, A), lbFake.deps()));
         EsDeps lbReal = buildLBRealDep();
         cs.add(c("LBdep-real", lbReal.es(), exp(F, F, F, A, F), lbReal.deps()));
