@@ -118,6 +118,32 @@ public final class LitmusParser {
     /** Optional sink for {@link DepDecision}s; {@code null} (the default) disables tracing. */
     public static volatile java.util.function.Consumer<DepDecision> DEP_TRACE = null;
 
+    /**
+     * Pluggable exact constancy oracle for the dependency detector. Given a value
+     * expression {@code expr} and a register {@code reg} that the O(1) idiom fast-path did
+     * <em>not</em> already fold to a constant, it returns {@code TRUE} if {@code expr} is
+     * provably <em>constant</em> in {@code reg} (a fake dependency), {@code FALSE} if it
+     * provably <em>varies</em> with {@code reg} (a real dependency), or {@code null} if the
+     * expression is outside the oracle's modelled grammar — in which case the detector
+     * falls back to a conservative <em>semantic</em> classification.
+     *
+     * <p>{@code null} by default (inert): with no oracle installed the detector uses its
+     * solver-free linear-cancellation fallback, so the parser carries no solver dependency
+     * for its many callers and the default classification is byte-for-byte unchanged.
+     * Installing an oracle (e.g. {@code wev.smt.QfbvConstancyOracle}) makes it the
+     * <em>primary</em> decision procedure after the idiom fast-path, so
+     * {@code sdep_impl = sdep_true} exactly on the modelled (branch-free bitvector-arithmetic)
+     * fragment. Not thread-safe by design — set it, run single-threaded, then clear it.
+     */
+    @FunctionalInterface
+    public interface ConstancyOracle {
+        /** {@code TRUE}=constant/fake, {@code FALSE}=varies/real, {@code null}=undecided. */
+        Boolean isConstant(String expr, String reg);
+    }
+
+    /** Optional exact constancy oracle; {@code null} (default) selects the solver-free path. */
+    public static volatile ConstancyOracle CONSTANCY_ORACLE = null;
+
     // ── Public API ──────────────────────────────────────────────────────────
 
     /** Parse one {@code .litmus} file body. Throws {@link ParseException} on failure. */
@@ -1219,8 +1245,25 @@ public final class LitmusParser {
             if (!mentionsReg) {
                 return new Verdict(false, fired.isEmpty() ? "ABSENT" : String.join("+", fired));
             }
-            // Linear-arithmetic normalization on the (already idiom-folded) expression: a
-            // net zero coefficient for reg means the value is invariant in reg ⇒ fake.
+            // Primary path: the exact QF_BV constancy oracle, when one is installed. It
+            // subsumes the linear-cancellation heuristic below (it also proves non-linear
+            // invariance), so sdep_impl = sdep_true on the modelled bitvector fragment.
+            ConstancyOracle oracle = CONSTANCY_ORACLE;
+            if (oracle != null) {
+                Boolean constant = oracle.isConstant(expr, reg);
+                if (constant == null) {                       // outside the grammar: conservative
+                    fired.add("CONSERVATIVE");
+                    return new Verdict(true, String.join("+", fired));
+                }
+                if (constant) {                               // provably invariant ⇒ fake
+                    fired.add("QFBV_CONST");
+                    return new Verdict(false, String.join("+", fired));
+                }
+                fired.add("QFBV_VARIES");                     // provably varies ⇒ real
+                return new Verdict(true, String.join("+", fired));
+            }
+            // Solver-free fallback (no oracle installed): linear-arithmetic normalization on
+            // the idiom-folded expression — a net zero coefficient for reg proves invariance.
             Integer coeff = linearCoefficient(e, reg);
             if (coeff != null && coeff == 0) {
                 fired.add("LINEAR_CANCEL");
