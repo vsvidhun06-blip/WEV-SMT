@@ -1,0 +1,232 @@
+original_test,original_verdict,mutant_verdict,expression_original,expression_mutant,discriminating,notes
+herdtools7/catalogue/aarch64-down-one-leg/tests/PPOCA4b.litmus,ALLOWED,ALLOWED,"EOR W5,W4,W4","and W5,W4,W4",no,fake edge not on a thin-air cycle
+herdtools7/catalogue/aarch64-down-one-leg/tests/PPOCA5b.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+herdtools7/catalogue/aarch64-pick/tests/LB+CSEL-rfi-data+DMB.litmus,ALLOWED,ALLOWED,"EOR W8, W6, W6","and W8,W6,W6",no,orig-not-fake(sem=2)
+herdtools7/catalogue/aarch64-pick/tests/MP+rel+CSEL-addr.litmus,ALLOWED,ALLOWED,"EOR W8,W7,W7","and W8,W7,W7",no,fake edge not on a thin-air cycle
+herdtools7/catalogue/aarch64-pick/tests/MP+rel+CSEL-addr2.litmus,ALLOWED,ALLOWED,"EOR W8,W7,W7","and W8,W7,W7",no,fake edge not on a thin-air cycle
+herdtools7/catalogue/aarch64/tests/CAS+data2.litmus,ALLOWED,ALLOWED,"EOR W0,W0,W0","and W0,W0,W0",no,fake edge not on a thin-air cycle
+herdtools7/catalogue/aarch64/tests/MP+rel+addr-po-loc-addr.litmus,ALLOWED,ALLOWED,"EOR W4,W2,W2","and W4,W2,W2",no,mutant-not-semantic(sem=0)
+herdtools7/catalogue/aarch64/tests/SB+CAS-rfi-addr+DMBSY.litmus,ALLOWED,ALLOWED,"EOR W6,W5,W5","and W6,W5,W5",no,fake edge not on a thin-air cycle
+herdtools7/catalogue/aarch64/tests/SB+SWP-rfi-addr+DMBSY.litmus,ALLOWED,ALLOWED,"EOR W6,W5,W5","and W6,W5,W5",no,fake edge not on a thin-air cycle
+herdtools7/catalogue/herding-cats/ppc/tests/illustrative/LB+datas.litmus,ALLOWED,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",yes,"discriminating: fake=ALLOWED, real=FORBIDDEN"
+herdtools7/catalogue/herding-cats/ppc/tests/illustrative/S+lwsync+data.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+herdtools7/herd/tests/instructions/AArch64/L103.litmus,ALLOWED,ALLOWED,"EOR X4,X3,X3","and X4,X3,X3",no,fake edge not on a thin-air cycle
+herdtools7/herd/tests/instructions/PPC/A015.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/HAND/RSDWI.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+[fr-rf]-addr-pos-addr-pos.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+[fr-rf]-addr-rfi-pos-addr.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+[fr-rf]-addr-rfi-pos.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+[fr-rf]-data-rfi-addr.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+[fr-rf]-data-rfi.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-[fr-rf]-addr-pos-addr.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-data-rfi-addr-pos.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-data-rfi-pos-addr.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-fri-[ws-rf]-addr-pos.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-fri-rfi-addr.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-pos-[fr-rf]-addr.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-pos-data-rfi-addr.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-rfi-data-rfi-addr.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-wsi-rfi-addr-pos.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+addr-wsi-rfi-pos-addr.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+data-rfi-addr-pos-addr.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+data-rfi-pos-addr-pos.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-addr-[fr-rf]-addr.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-addr-pos-[fr-rf]-addr.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,mutant-not-semantic(sem=0)
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-addr-rfi-[fr-rf]-addr.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-addr-rfi-addr-[fr-rf].litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-addr-rfi-addr-pos.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-addr-rfi-pos-addr.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-addr-rfi-pos.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-ctrl-[fr-rf]-addr.litmus,ALLOWED,ALLOWED,"EOR W6,W5,W5","and W6,W5,W5",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-ctrl-addr-[fr-rf]-addr.litmus,ALLOWED,ALLOWED,"EOR W5,W3,W3","and W5,W3,W3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-ctrl-addr-[fr-rf].litmus,ALLOWED,ALLOWED,"EOR W5,W3,W3","and W5,W3,W3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-ctrl-addr-data-rfi.litmus,ALLOWED,ALLOWED,"EOR W5,W3,W3","and W5,W3,W3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-ctrl-addr-pos-addr.litmus,ALLOWED,ALLOWED,"EOR W5,W3,W3","and W5,W3,W3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-ctrl-addr-pos.litmus,ALLOWED,ALLOWED,"EOR W5,W3,W3","and W5,W3,W3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-ctrl-addr.litmus,ALLOWED,ALLOWED,"EOR W5,W3,W3","and W5,W3,W3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-ctrl-pos-[fr-rf]-addr.litmus,ALLOWED,ALLOWED,"EOR W7,W6,W6","and W7,W6,W6",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-ctrlisb-[fr-rf]-addr.litmus,ALLOWED,ALLOWED,"EOR W6,W5,W5","and W6,W5,W5",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-data-[ws-rf]-addr.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-data-rfi-addr.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/PPO/MP+dmb.sy+pos-data-rfi-data-rfi.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/RPLUS/R+po-addr-fripl+pola.litmus,ALLOWED,ALLOWED,"EOR W4,W2,W2","and W4,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/RPLUS/R+po-addr-popl+rfila.litmus,ALLOWED,ALLOWED,"EOR W4,W2,W2","and W4,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/RPLUS/R+rfi-addr-datapl+rfila.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/RPLUS/R+rfi-addr-popl+rfila.litmus,ALLOWED,ALLOWED,"EOR W3,W2,W2","and W3,W2,W2",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/3.LB+dmb.sy+data+data.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+data+dataap.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dataaps.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.ld+data.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.ld+datapl.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.ldal+dataap.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.ldap+dataal.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.ldpl+dataal.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.st+data.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.st+datapl.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.stal+data.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.stap+data.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.stap+datapl.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.stpl+dataal.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.sy+dataal.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.syal+dataap.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.syap+dataap.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/SYS/LB+dmb.sypl+dataap.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/TUTO/LB+addrs.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/AARCH64/TUTO/LB+datas.litmus,ALLOWED,ALLOWED,"EOR W2,W0,W0","and W2,W0,W0",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/2+2W+lwsync+rfi-data.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/2+2W+rfi-datas.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0160.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0169.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0173.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0177.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0181.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0189.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0193.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0197.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0201.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0236.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0239.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0244.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0248.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0253.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0256.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0260.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0294.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0298.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0302.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0306.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0316.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0319.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0323.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0327.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0340.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0344.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0351.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0359.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0362.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0368.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0371.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0374.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0382.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0385.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0388.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0412.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0415.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0418.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0423.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0426.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0429.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0453.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0458.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0461.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0464.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0469.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0472.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0475.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0484.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0487.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0490.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0493.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0498.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0501.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0504.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0507.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0552.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0574.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0608.litmus,FORBIDDEN,FORBIDDEN,"xor r4,r3,r3","and r4,r3,r3",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0729.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0734.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0750.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0771.litmus,FORBIDDEN,FORBIDDEN,"xor r4,r3,r3","and r4,r3,r3",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0796.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0800.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0825.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0873.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0929.litmus,ALLOWED,ALLOWED,"xor r5,r3,r3","and r5,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0982.litmus,ALLOWED,ALLOWED,"xor r5,r4,r4","and r5,r4,r4",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0985.litmus,ALLOWED,ALLOWED,"xor r7,r6,r6","and r7,r6,r6",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0988.litmus,FORBIDDEN,FORBIDDEN,"xor r6,r5,r5","and r6,r5,r5",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR0993.litmus,ALLOWED,ALLOWED,"xor r6,r4,r4","and r6,r4,r4",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR0997.litmus,ALLOWED,ALLOWED,"xor r6,r5,r5","and r6,r5,r5",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1000.litmus,ALLOWED,ALLOWED,"xor r6,r5,r5","and r6,r5,r5",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1028.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1105.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1108.litmus,ALLOWED,ALLOWED,"xor r6,r5,r5","and r6,r5,r5",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1112.litmus,ALLOWED,ALLOWED,"xor r6,r5,r5","and r6,r5,r5",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1116.litmus,ALLOWED,ALLOWED,"xor r7,r6,r6","and r7,r6,r6",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1120.litmus,ALLOWED,ALLOWED,"xor r6,r4,r4","and r6,r4,r4",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1124.litmus,ALLOWED,ALLOWED,"xor r5,r4,r4","and r5,r4,r4",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1128.litmus,ALLOWED,ALLOWED,"xor r5,r4,r4","and r5,r4,r4",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1157.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1179.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR1204.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1216.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1247.litmus,ALLOWED,ALLOWED,"xor r6,r5,r5","and r6,r5,r5",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1250.litmus,ALLOWED,ALLOWED,"xor r6,r5,r5","and r6,r5,r5",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1256.litmus,FORBIDDEN,FORBIDDEN,"xor r5,r4,r4","and r5,r4,r4",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/DETOUR1259.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1262.litmus,ALLOWED,ALLOWED,"xor r5,r4,r4","and r5,r4,r4",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1265.litmus,ALLOWED,ALLOWED,"xor r5,r4,r4","and r5,r4,r4",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/DETOUR1313.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/ISA2+lwsync+data+isync.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/ISA2+lwsync+data+sync.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/ISA2+rfi-data+lwsync+lwsync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/ISA2+rfi-data+sync+sync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/ISA2+sync+data+lwsync.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/LB+PPO0169.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0175.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0190.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0196.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0210.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0215.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0326.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/LB+PPO0351.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0407.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0432.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0495.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0528.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+PPO0569.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/LB+datas+WW.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/MP+PPO622.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/MP+PPO628.litmus,FORBIDDEN,FORBIDDEN,"xor r5,r4,r4","and r5,r4,r4",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/MP+PPO654.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/MP+PPO658.litmus,FORBIDDEN,FORBIDDEN,"xor r4,r3,r3","and r4,r3,r3",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/MP+PPO678.litmus,FORBIDDEN,FORBIDDEN,"xor r6,r5,r5","and r6,r5,r5",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/MP+PPO902.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/MP+PPO922.litmus,FORBIDDEN,FORBIDDEN,"xor r5,r4,r4","and r5,r4,r4",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/MP+PPO929.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/MP+rfi-data+sync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/S+PPO283.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/S+PPO396.litmus,FORBIDDEN,FORBIDDEN,"xor r4,r3,r3","and r4,r3,r3",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/S+PPO401.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/S+PPO405.litmus,FORBIDDEN,FORBIDDEN,"xor r6,r5,r5","and r6,r5,r5",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/S+PPO456.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/S+PPO459.litmus,FORBIDDEN,FORBIDDEN,"xor r4,r3,r3","and r4,r3,r3",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/S+PPO473.litmus,FORBIDDEN,FORBIDDEN,"xor r5,r4,r4","and r5,r4,r4",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/S+PPO495.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/S+PPO530.litmus,FORBIDDEN,FORBIDDEN,"xor r3,r1,r1","and r3,r1,r1",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/S+PPO536.litmus,FORBIDDEN,FORBIDDEN,"xor r5,r4,r4","and r5,r4,r4",no,orig FORBIDDEN (candidate already inconsistent)
+Dat3M/litmus/PPC/S+isync+data.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/S+po+data.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/S+rfi-data+sync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/S+sync+data.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/W+RWC+rfi-data+lwsync+sync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/WRC+data+isync.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/WRC+data+sync.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/WRR+2W+lwsync+rfi-data.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/WRW+2W+data+sync.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/WRW+2W+lwsync+rfi-data.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.0+rfi-data+lwsync+sync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.1+lwsync+lwsync+data.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.1+lwsync+rfi-data+data.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.1+rfi-data+lwsync+lwsync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.1+rfi-data+rfi-data+lwsync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.1+rfi-data+sync+lwsync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.1+sync+rfi-data+lwsync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.2+rfi-data+data+sync.litmus,ALLOWED,ALLOWED,"xor r3,r1,r1","and r3,r1,r1",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.2+rfi-data+lwsync+sync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.2+rfi-data+sync+sync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.3+rfi-data+lwsync+lwsync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.3+rfi-data+rfi-data+sync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.3+sync+rfi-data+lwsync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
+Dat3M/litmus/PPC/Z6.5+rfi-data+rfi-data+sync.litmus,ALLOWED,ALLOWED,"xor r4,r3,r3","and r4,r3,r3",no,fake edge not on a thin-air cycle
