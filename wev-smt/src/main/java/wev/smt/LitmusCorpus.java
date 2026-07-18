@@ -113,6 +113,7 @@ public final class LitmusCorpus {
 
         // ── Pass 3 (Stage 2): dependency-carrying LB variants 
         // The Stage-2 jf-coherence axiom (AxiomaticConsistency.jfCoherence) separates
+        EsDeps lbFake = buildLBFakeDep();
         cs.add(c("LBdep-fake", lbFake.es(), exp(F, F, F, A, A), lbFake.deps()));
         EsDeps lbReal = buildLBRealDep();
         cs.add(c("LBdep-real", lbReal.es(), exp(F, F, F, A, F), lbReal.deps()));
