@@ -1,0 +1,20 @@
+(*  Isabelle session for the WEV-SMT mechanisation (TACAS 2027 artifact).
+
+    Build with:   isabelle build -d . WEV_SMT
+    Verbose:      isabelle build -d . -v WEV_SMT
+    Force rerun:  isabelle build -d . -c WEV_SMT
+
+    Depends on HOL only; no AFP entries are used.
+*)
+
+session WEV_SMT = HOL +
+  description \<open>
+    Mechanisation of Lemma 2 (detector soundness), the branch-free detector
+    exactness result, and Theorem 1 (WEAKEST consistency rules out thin-air
+    cycles) for the WEV-SMT semantic-dependency checker.
+  \<close>
+  options [document = false]
+  theories
+    WEV_SMT_Defs
+    Detector
+    Soundness
