@@ -94,6 +94,7 @@
                      mvn -q exec:exec@scalability-fences   (Day-12 fence/RMW sweep)
                      mvn -q exec:exec@corpus-validation    (Day-11 corpus sweep; -Dcorpus.dir=<root>)
                      mvn -q exec:exec@robustness           (Day-14 edge-case robustness sweep, report in eval/)
+                     mvn -q exec:exec@ra-formal            (RA_FORMAL chain atlas, ra-formal-atlas.csv in eval/)
                  The <classpath/> token expands to the full runtime classpath. -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -184,6 +185,19 @@
                                 <argument>-classpath</argument>
                                 <classpath/>
                                 <argument>wev.smt.cli.RobustnessSweep</argument>
+                                <argument>eval</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>ra-formal</id>
+                        <configuration>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-Djava.library.path=${native.dir}</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>wev.smt.cli.RaFormalAtlasRun</argument>
                                 <argument>eval</argument>
                             </arguments>
                         </configuration>

@@ -3,6 +3,7 @@ package wev.smt.parse;
 import com.weakest.model.Event;
 import com.weakest.model.EventStructure;
 import com.weakest.model.EventType;
+import com.weakest.model.MemoryOrder;
 import com.weakest.model.ReadEvent;
 import com.weakest.model.WriteEvent;
 import org.junit.jupiter.api.Test;
@@ -181,6 +182,47 @@ class LitmusParserTest {
         assertSame(writeY, edge.consumer(), "consumer is the store");
         assertSame(readX, edge.producer(), "producer is the load");
         assertTrue(edge.isSemantic(), "edge is semantic");
+    }
+
+    // ── Memory-order-annotated macros (release/acquire fragment, TACAS M1) ───────
+
+    /**
+     * {@code READ_ONCE_ACQ} / {@code WRITE_ONCE_REL} / {@code WRITE_ONCE_RELACQ} must
+     * lower to loads/stores carrying the annotated {@link MemoryOrder}: ACQ→acquire,
+     * REL→release, RELACQ→SC (the strongest order we model — there is no dedicated
+     * ACQ_REL). This is the MP-relacq shape, which the RA layer synchronises.
+     */
+    @Test
+    void memoryOrderMacrosSetAccessOrder() {
+        LitmusCase lc = LitmusParser.parse("""
+                C MP-RELACQ
+                { }
+                 P0                      | P1                       ;
+                 WRITE_ONCE(*d,1)        | r1 = READ_ONCE_ACQ(*f)   ;
+                 WRITE_ONCE_REL(*f,1)    | r2 = READ_ONCE(*d)       ;
+                exists (1:r1=1 /\\ 1:r2=0)
+                """, "mp-relacq.litmus");
+
+        assertSame(MemoryOrder.RELEASE, writeTo(lc.es(), "f").getMemoryOrder(),
+                "WRITE_ONCE_REL(*f,1) is a release store");
+        assertSame(MemoryOrder.ACQUIRE, readOf(lc.es(), "f").getMemoryOrder(),
+                "r1 = READ_ONCE_ACQ(*f) is an acquire load");
+        assertSame(MemoryOrder.RELAXED, writeTo(lc.es(), "d").getMemoryOrder(),
+                "the bare WRITE_ONCE(*d,1) stays relaxed");
+    }
+
+    @Test
+    void writeOnceRelacqMapsToSc() {
+        LitmusCase lc = LitmusParser.parse("""
+                C RELACQ
+                { }
+                 P0                       ;
+                 WRITE_ONCE_RELACQ(*x,1)  ;
+                exists (x=1)
+                """, "relacq.litmus");
+
+        assertSame(MemoryOrder.SC, writeTo(lc.es(), "x").getMemoryOrder(),
+                "a release-acquire store is the strongest order we model (SC)");
     }
 
     // ── Address dependencies: AArch64 indexed addressing ─────────────────────────

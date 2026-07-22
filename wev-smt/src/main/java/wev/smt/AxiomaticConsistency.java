@@ -91,6 +91,7 @@ public final class AxiomaticConsistency {
     public BooleanFormula consistencyPSO() { return consistencyPSO(noGate()); }
     public BooleanFormula consistencyPSOCanonical() { return consistencyPSOCanonical(noGate()); }
     public BooleanFormula consistencyRA() { return consistencyRA(noGate()); }
+    public BooleanFormula consistencyRA_FORMAL() { return consistencyRA_FORMAL(noGate()); }
     public BooleanFormula consistencyWEAKEST() { return consistencyWEAKEST(noGate()); }
     public BooleanFormula consistencyRC11() { return consistencyRC11(noGate()); }
 
@@ -173,6 +174,42 @@ public final class AxiomaticConsistency {
         // cheap, independent safety net (and shared with the other models).
         cs.add(coherencePerLocation(active));
         cs.add(rmwAtomicity(active));
+        return bmgr.and(cs);
+    }
+
+    /**
+     * <b>RA_FORMAL</b> — the release/acquire model stated as a first-class, named axiom for
+     * the formal {@code SC ⊇ TSO ⊇ RA_FORMAL ⊇ WEAKEST} strength chain (TACAS reviewer M1).
+     *
+     * <p><b>sw (synchronises-with).</b> A release write consumed by an acquire read of the
+     * same location synchronises: {@code sw = [W⊒rel] ; rf ; [R⊒acq]} — exactly the base
+     * edge {@link #irreflexiveHbEco} adds to {@code hb} (see {@link #isReleaseLike} /
+     * {@link #isAcquireLike}, which also fold in the C/C++ fence-to-release/acquire rules).
+     *
+     * <p><b>Axiom.</b> {@code irreflexive(hb ; eco?)} with {@code hb = (po ∪ sw)+} and
+     * {@code eco = (rf ∪ co ∪ fr)+} — the RC11 release/acquire coherence axiom (Lahav,
+     * Vafeiadis, Kang, Hur &amp; Dreyer, PLDI 2017, §3), plus the shared per-location
+     * coherence and RMW-atomicity base. This is <em>definitionally identical</em> to
+     * {@link #consistencyRA}; RA_FORMAL is the same relation exposed under an explicit name
+     * so the chain atlas can pin it as the RA rung.
+     *
+     * <p><b>Why not {@code acyclic(po ∪ sw ∪ rf ∪ co ∪ fr)}.</b> The tempting
+     * single-acyclicity phrasing does not give RA. Because {@code sw ⊆ rf}, unioning full
+     * {@code rf} with full {@code po} yields precisely SC's {@code acyclic(po ∪ rf ∪ co ∪ fr)}.
+     * Even restricted to {@code acyclic(po ∪ sw ∪ co ∪ fr)}, full {@code po} together with
+     * {@code fr} already closes the SB cycle {@code Wx→Ry→Wy→Rx→Wx}, so it FORBIDS SB / R /
+     * IRIW — strictly stronger than TSO, which breaks the {@code TSO ⊇ RA} rung of the very
+     * chain this model is meant to establish. (This codebase used that single-layer encoding
+     * historically and replaced it for exactly this reason; see {@link #irreflexiveHbEco}.)
+     * The {@code hb ; eco?} form keeps the two-{@code eco}-segment cycles (SB / R / IRIW)
+     * allowed and only forbids the one-segment {@code hb ; eco} cycles (MP-relacq / CO-MP),
+     * which is what places RA_FORMAL properly between TSO and WEAKEST.
+     */
+    public BooleanFormula consistencyRA_FORMAL(Function<Event, BooleanFormula> active) {
+        List<BooleanFormula> cs = new ArrayList<>();
+        cs.add(irreflexiveHbEco(active));       // irreflexive(hb;eco?), hb = (po ∪ sw)+
+        cs.add(coherencePerLocation(active));   // SC-per-location (shared base)
+        cs.add(rmwAtomicity(active));           // no co-intervening write in an RMW (shared base)
         return bmgr.and(cs);
     }
 

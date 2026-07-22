@@ -875,6 +875,16 @@ public final class LitmusParser {
 
         private static final Pattern C_WRITE_ONCE = Pattern.compile(
                 "(?i)WRITE_ONCE\\s*\\(\\s*\\*?\\s*(\\w+)\\s*,\\s*([^)]+)\\)");
+        // Memory-order-annotated WRITE_ONCE / READ_ONCE macros (release/acquire fragment,
+        // TACAS M1): WRITE_ONCE_REL(*x,e) / WRITE_ONCE_RELACQ(*x,e) / WRITE_ONCE_ACQ_REL(*x,e)
+        // and r = READ_ONCE_ACQ(*x) / READ_ONCE_REL(*x) / READ_ONCE_RELACQ(*x). The suffix
+        // maps to the access's MemoryOrder; these are matched before the bare macros above.
+        // (Mutually exclusive with them anyway: the bare pattern requires '(' right after
+        // the macro name, which the suffixed spellings never have.)
+        private static final Pattern C_WRITE_ONCE_ORD = Pattern.compile(
+                "(?i)WRITE_ONCE_(REL|ACQ|RELACQ|ACQ_REL)\\s*\\(\\s*\\*?\\s*(\\w+)\\s*,\\s*([^)]+)\\)");
+        private static final Pattern C_READ_ONCE_ORD = Pattern.compile(
+                "(?i)(\\w+)\\s*=\\s*READ_ONCE_(ACQ|REL|RELACQ|ACQ_REL)\\s*\\(\\s*\\*?\\s*(\\w+)\\s*\\)");
         private static final Pattern C_STORE_REL = Pattern.compile(
                 "(?i)smp_store_release\\s*\\(\\s*&?\\s*(\\w+)\\s*,\\s*([^)]+)\\)");
         private static final Pattern C_ATOMIC_STORE = Pattern.compile(
@@ -900,6 +910,12 @@ public final class LitmusParser {
 
         private Insn lexC(String t, RawInstr ri) {
             Matcher m;
+            if ((m = C_WRITE_ONCE_ORD.matcher(t)).find()) {
+                return store(m.group(2), m.group(3), moFromSuffix(m.group(1)), t);
+            }
+            if ((m = C_READ_ONCE_ORD.matcher(t)).find()) {
+                return load(m.group(1), m.group(3), moFromSuffix(m.group(2)), t);
+            }
             if ((m = C_WRITE_ONCE.matcher(t)).find()) {
                 return store(m.group(1), m.group(2), MemoryOrder.RELAXED, t);
             }
@@ -1161,6 +1177,21 @@ public final class LitmusParser {
         }
 
         // ── Memory-order tokens ─────────────────────────────────────────────────────
+
+        /**
+         * Map a {@code READ_ONCE_*} / {@code WRITE_ONCE_*} macro suffix to a
+         * {@link MemoryOrder}: {@code ACQ}→acquire, {@code REL}→release, and the combined
+         * {@code RELACQ}/{@code ACQ_REL} (a release-and-acquire access) to {@code SC}, the
+         * strongest order we model — {@link MemoryOrder} has no dedicated {@code ACQ_REL},
+         * and SC is the sound over-approximation for a full-barrier access.
+         */
+        private static MemoryOrder moFromSuffix(String suffix) {
+            return switch (suffix.toUpperCase(Locale.ROOT)) {
+                case "ACQ" -> MemoryOrder.ACQUIRE;
+                case "REL" -> MemoryOrder.RELEASE;
+                default -> MemoryOrder.SC;      // RELACQ / ACQ_REL
+            };
+        }
 
         private static MemoryOrder moFromToken(String tok) {
             String s = tok.toLowerCase(Locale.ROOT);
