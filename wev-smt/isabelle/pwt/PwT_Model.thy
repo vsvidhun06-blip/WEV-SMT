@@ -284,6 +284,20 @@ theorem sdep_differ_only_outside_grammar:
   "sdep_impl_l - sdep_true_l \<subseteq> {(p, c). site c p = None}"
   by (auto simp: sdep_impl_l_unfolded sdep_true_l_unfolded split: option.splits)
 
+text \<open>
+  Theorem 1 in the concrete model. Stating it here rather than leaving it
+  implicit in the sublocale is the point of the whole exercise: the no-thin-air
+  result now holds of a detector whose notion of "constant" is BV32
+  non-constancy, not of a detector parameterised by an uninterpreted predicate.
+\<close>
+
+corollary bv_no_thin_air:
+  "jfcoherence_consistent_l jf \<Longrightarrow> \<not> thin_air_cycle_l jf"
+  by (rule soundness_l)
+
+corollary bv_detector_soundness: "sdep_true_l \<subseteq> sdep_impl_l"
+  by (rule detector_soundness_l)
+
 end
 
 subsection \<open>The conservative treatment of undecided sites is load-bearing\<close>

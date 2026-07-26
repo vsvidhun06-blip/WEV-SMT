@@ -1,10 +1,18 @@
 (*  Isabelle session for the WEV-SMT mechanisation (TACAS 2027 artifact).
 
-    Build with:   isabelle build -d . WEV_SMT
-    Verbose:      isabelle build -d . -v WEV_SMT
-    Force rerun:  isabelle build -d . -c WEV_SMT
+    Build with:   isabelle build -d . WEV_SMT WEV_SMT_PwT
+    Verbose:      isabelle build -d . -v WEV_SMT WEV_SMT_PwT
+    Force rerun:  isabelle build -d . -c WEV_SMT WEV_SMT_PwT
 
-    Depends on HOL only; no AFP entries are used.
+    Two sessions. WEV_SMT holds the original abstract development (Lemma 2,
+    detector exactness, Theorem 1). WEV_SMT_PwT, in the pwt/ subdirectory,
+    holds the PwT correspondence: the BV32 expression language, the concrete
+    constancy predicate, the model that discharges WEV_SMT's abstraction, the
+    per-site R4b results and the program-level lifting. They are separate
+    sessions because Isabelle does not permit two sessions to share a source
+    directory, and because only the second needs HOL-Library.Word.
+
+    Depends on HOL and HOL-Library only; no AFP entries are used.
 *)
 
 session WEV_SMT = HOL +
