@@ -18,3 +18,16 @@ session WEV_SMT = HOL +
     WEV_SMT_Defs
     Detector
     Soundness
+
+session WEV_SMT_PwT in "pwt" = WEV_SMT +
+  description \<open>
+    Mechanisation of the PwT correspondence: the 32-bit branch-free expression
+    language of the QF_BV constancy oracle, the per-site equivalence between
+    PwT's two-point R4b check and non-constancy, and the program-level
+    over-approximation result for WEAKEST's composed semantic dependency.
+  \<close>
+  options [document = false]
+  sessions
+    "HOL-Library"
+  theories
+    PwT_Expr
