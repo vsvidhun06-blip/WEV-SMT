@@ -34,3 +34,4 @@ session WEV_SMT_PwT in "pwt" = WEV_SMT +
     PwT_Constancy
     PwT_Model
     PwT_R4b
+    PwT_Program
