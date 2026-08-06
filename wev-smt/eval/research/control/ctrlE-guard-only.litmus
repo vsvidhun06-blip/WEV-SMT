@@ -1,0 +1,8 @@
+C ctrlE-guard-only
+(* GATE 2 case E: guard-dependent but effect-independent. Both arms write the     *)
+(* register r1 loaded from z, so the effect is constant in r0 but genuinely       *)
+(* varies with r1. Expected: FAKE wrt r0, REAL wrt r1.                            *)
+{ }
+P0(int *x, int *y, int *z) { r0 = READ_ONCE(*y); r1 = READ_ONCE(*z); if (r0 == 1) WRITE_ONCE(*x, r1); else WRITE_ONCE(*x, r1); }
+P1(int *x, int *y) { r2 = READ_ONCE(*x); WRITE_ONCE(*y, 1); }
+exists (0:r0=1 /\ 1:r2=1)

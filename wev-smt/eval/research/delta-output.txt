@@ -1,0 +1,55 @@
+=== STEP 5 delta: eval/pre-fix-snapshot.json vs eval/post-fix-snapshot.json ===
+   leaf values compared      : 368
+   UNCHANGED (deterministic) : 255
+   CHANGED   (deterministic) : 0
+   non-deterministic fields  : 113  (timings/timestamps, excluded)
+   added / removed keys      : 0 / 0
+
+   => every deterministic published value is UNCHANGED.
+
+=== eval/numbers.tex (paper macros) ===
+   macros before / after : 100 / 100
+   changed macros: 24 total  (24 timing, 0 SCIENTIFIC)
+   => NO scientific macro changed; all 24 differences are wall-clock timings.
+      (timing) \CorpusWallSeconds            OLD=84.3       NEW=86.1
+      (timing) \LbRealFakeRatio              OLD=0.98       NEW=0.97
+      (timing) \MaxRuntimeMs                 OLD=73         NEW=66
+      (timing) \MeanRuntimeMs                OLD=13.0       NEW=13.3
+      (timing) \MedianRuntimeMs              OLD=10         NEW=11
+      (timing) \PNinetyFiveRuntimeMs         OLD=23         NEW=24
+      (timing) \PsoRaMaxMs                   OLD=4944       NEW=4868
+      (timing) \ScalIRIWFanPSORA             OLD=4944       NEW=4868
+      (timing) \ScalIRIWFanSC                OLD=36         NEW=39
+      (timing) \ScalIRIWFanTSO               OLD=36         NEW=37
+      (timing) \ScalIRIWFanWEAKEST           OLD=43         NEW=41
+      (timing) \ScalLBChainPSORA             OLD=2612       NEW=2631
+      (timing) \ScalLBChainSC                OLD=30         NEW=28
+      (timing) \ScalLBChainTSO               OLD=26         NEW=31
+      (timing) \ScalLBChainWEAKEST           OLD=92         NEW=88
+      (timing) \ScalLBFakeChainPSORA         OLD=2592       NEW=2653
+      (timing) \ScalLBFakeChainSC            OLD=27         NEW=26
+      (timing) \ScalLBFakeChainTSO           OLD=27         NEW=24
+      (timing) \ScalLBFakeChainWEAKEST       OLD=94         NEW=91
+      (timing) \ScalSBNThreadPSORA           OLD=2554       NEW=2448
+      (timing) \ScalSBNThreadSC              OLD=30         NEW=27
+      (timing) \ScalSBNThreadTSO             OLD=34         NEW=38
+      (timing) \ScalSBNThreadWEAKEST         OLD=87         NEW=85
+      (timing) \WeakestMaxMs                 OLD=94         NEW=91
+
+=== eval/tables.tex (Tables 1-4 bodies) ===
+   *** DIFFERS ***
+      line 2
+        OLD % Generated: 2026-07-28T20:07:54+0100
+        NEW % Generated: 2026-07-28T20:47:38+0100
+      line 15
+        OLD   $\mathsf{LBChain}$ ($n{=}16$, 48 events) & FORBIDDEN & 30 & 26 & 92 & $\sim$2612 \\
+        NEW   $\mathsf{LBChain}$ ($n{=}16$, 48 events) & FORBIDDEN & 28 & 31 & 88 & $\sim$2631 \\
+      line 16
+        OLD   $\mathsf{LBFakeChain}$ ($n{=}16$, 48 events) & ALLOWED & 27 & 27 & 94 & $\sim$2592 \\
+        NEW   $\mathsf{LBFakeChain}$ ($n{=}16$, 48 events) & ALLOWED & 26 & 24 & 91 & $\sim$2653 \\
+      line 17
+        OLD   $\mathsf{SBNThread}$ ($n{=}16$, 48 events) & ALLOWED & 30 & 34 & 87 & $\sim$2554 \\
+        NEW   $\mathsf{SBNThread}$ ($n{=}16$, 48 events) & ALLOWED & 27 & 38 & 85 & $\sim$2448 \\
+      line 18
+        OLD   $\mathsf{IRIWFan}$ ($n{=}16$, 64 events) & ALLOWED & 36 & 36 & 43 & $\sim$4944 \\
+        NEW   $\mathsf{IRIWFan}$ ($n{=}16$, 64 events) & ALLOWED & 39 & 37 & 41 & $\sim$4868 \\

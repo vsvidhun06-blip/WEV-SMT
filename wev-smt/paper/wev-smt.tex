@@ -22,6 +22,12 @@
 \newcommand{\sdeptrue}{\mathsf{sdep}_{\mathrm{true}}}
 \newcommand{\jfCoherence}{\textsf{jfCoherence}}
 
+%% Generated evaluation numbers and table bodies — produced by `python eval/run_all.py`,
+%% which writes eval/results.json and regenerates both files below. Do not hand-edit
+%% either file, and do not hand-type any number they define.
+\input{../eval/numbers.tex}
+\input{../eval/tables.tex}
+
 % ADD THESE ENTRIES TO refs.bib BEFORE SUBMITTING:
 %
 % @inproceedings{wickerson2017memalloy,
@@ -75,8 +81,8 @@ SMT-encodable without multi-execution machinery. Control dependencies are
 conservatively retained as semantic (a known limitation of the per-execution
 setting; \S\ref{sec:limitations}). We characterize the model lattice under
 our encoding and give a minimum-cardinality witness extraction procedure. We
-validate the encoder and hierarchy on a 2,998-test supported-syntax fragment
-of a 12,324-file corpus, with sdep ablation on the load-buffering family and
+validate the encoder and hierarchy on a \CorpusSize-test supported-syntax fragment
+of a \CorpusFilesTotal-file corpus, with sdep ablation on the load-buffering family and
 herd7 cross-checking on the shared strong subset.
 \end{abstract}
 
@@ -126,7 +132,7 @@ herd7 cross-checking on the shared strong subset.
  
 %% Evaluation node below everything
 \node[obs, below=1.1cm of weak] (eval)
-  {2,998-test empirical validation\\ablation · herd7 cross-check (§6)};
+  {\CorpusSize-test empirical validation\\ablation · herd7 cross-check (§6)};
 \draw[arr] (jfc.south) |- (eval.north);
 \draw[arr] (weak.south) -- (eval.north);
  
@@ -134,7 +140,7 @@ herd7 cross-checking on the shared strong subset.
 \caption{Contribution map. The central observation (rf alone is insufficient) motivates
 semantic dependency $\sdep$ (C1), from which $\jfCoherence$ and the WEAKEST model
 follow. The hierarchy result (C2) and witness extraction (C3) build on the WEAKEST
-encoding. All three contributions are corroborated by empirical validation on 2,998
+encoding. All three contributions are corroborated by empirical validation on \CorpusSize
 supported-syntax litmus tests.}
 \label{fig:contrib-map}
 \end{figure}
@@ -215,11 +221,11 @@ conservatism on control (\S\ref{sec:limitations}).
 \noindent\textbf{C1} (\S\S\ref{sec:semdep}--\ref{sec:soundness}): $\sdep$ as the maximal adequate relation (Prop.~\ref{prop:sdep-maximal}); $\jfCoherence$ sound (Thm.~\ref{thm:soundness}); grounded LB admission (Prop.~\ref{prop:grounded-admission}); RC11 containment (Cor.~\ref{cor:rc11-containment}).
 \textbf{C2} (\S\ref{sec:hierarchy}): SC dominates all (Thm.~\ref{thm:hierarchy}); two incomparability witnesses.
 \textbf{C3} (\S\ref{sec:witness}): OMT minimum-cardinality witness (Prop.~\ref{thm:minwitness}).
-\textbf{C4} (\S\ref{sec:detector}): 8-pattern $\sdepimpl$, empirically complete (0 missed fakes/2,998 tests).
-\textbf{C5} (\S\ref{sec:evaluation}): 0/2,998 hierarchy violations; 31/34 published-example agreement; PwT equivalence 80/80.
+\textbf{C4} (\S\ref{sec:detector}): 8-pattern $\sdepimpl$, empirically complete (0 missed fakes/\CorpusSize~tests).
+\textbf{C5} (\S\ref{sec:evaluation}): \HierarchyViolations/\CorpusSize~hierarchy violations; \PublishedExampleAgreement~published-example agreement; PwT equivalence \PwtAgreement.
 
 
-Validation on 2,998-test fragment of 12,324-file corpus (herd7+Dat3M): three-config ablation confirms $\sdep$ is empirically indispensable; 0/2,998 hierarchy violations; 31/34 published-example agreement; herd7 cross-check (84--86\% SC/TSO non-ARM).
+Validation on \CorpusSize-test fragment of \CorpusFilesTotal-file corpus (herd7+Dat3M): three-config ablation confirms $\sdep$ is empirically indispensable; \HierarchyViolations/\CorpusSize~hierarchy violations; \PublishedExampleAgreement~published-example agreement; herd7 cross-check (\HerdNonArmSCPercent\% SC / \HerdNonArmTSOPercent\% TSO non-ARM).
 
 This work identifies a middle point: a value-aware stratification of dependencies into semantic and fake is sufficient on the supported-syntax fragment to admit grounded LB while forbidding thin-air (Theorem~\ref{thm:soundness}).
 
@@ -561,7 +567,7 @@ $w_1,\ldots,w_n$ with $(w_i,r_i) \in \jf$ and $(r_{i-1},w_i) \in \sdeptrue$
 \end{definition}
 
 Table~\ref{tab:fidelity} confirms Definition~\ref{def:thin-air} agrees with the
-literature on canonical published examples (5/6; ctrl-double is the known
+literature on canonical published examples (\FidelityAgreement; ctrl-double is the known
 per-execution control limitation).
 
 \begin{table}[t]
@@ -572,8 +578,7 @@ per-execution control limitation).
 \toprule
 Program & Def.~\ref{def:thin-air} & Literature \\
 \midrule
-LB+data, LB+ctrldata+ctrl-single, LBd, LBfd, LB-real & as expected & agree \\
-LB+ctrldata+ctrl-double & FORB & ALLOW$^\dagger$ \\
+\FidelityTableBody
 \bottomrule
 \end{tabular}
 {\small $^\dagger$Per-execution over-forbids ctrl-double.}
@@ -595,23 +600,23 @@ If both writes in a two-thread LB candidate are fake, the candidate is jfCoheren
 No $\sdep$ edges on the cycle path; $\sdep \cup \jf$ contains only two disconnected $\jf$ edges.
 \end{proof}
 
-\noindent Verified: $\mathsf{LBFakeChain}(n)$ returns ALLOWED for all $n \in \{2,\ldots,8\}$ (\texttt{eval/nthread-grounded-admission.csv}).
+\noindent Verified: $\mathsf{LBFakeChain}(n)$ returns ALLOWED for all $n \in \{\NThreadMin,\ldots,\NThreadMax\}$ (\NThreadAllowed, \texttt{eval/nthread-grounded-admission.csv}).
 
 \begin{proposition}[PwT equivalence on branch-free arithmetic]
 \label{prop:pwt-equiv}
-On branch-free arithmetic, free-valuation $\sdep$ and PwT's predicate-transformer criterion agree: both reduce to non-constancy in the source register. Verified: 80/80 pairs agree (\texttt{eval/pwt-equivalence-sweep.csv}).
+On branch-free arithmetic, free-valuation $\sdep$ and PwT's predicate-transformer criterion agree: both reduce to non-constancy in the source register. Verified: \PwtAgreement~pairs agree (\texttt{eval/pwt-equivalence-sweep.csv}).
 \end{proposition}
 
 \begin{corollary}[RC11 subsumes jfCoherence]
 \label{cor:rc11-containment}
 On the data/address fragment: RC11-consistent $\Rightarrow$ jfCoherence-consistent.
-The converse fails (6 divergences; 0 in the other direction across 27 tests).
+The converse fails (\RcElevenDivergences~divergences; \RcElevenReverseDivergences~in the other direction across \RcElevenTests~tests).
 \end{corollary}
 \begin{proof}
 $\sdep \cup \jf \subseteq \po \cup \rf$; a cycle in $\sdep \cup \jf$ is a cycle in $\po \cup \rf$.
 \end{proof}
 
-\noindent Scope: sound relative to Definition~\ref{def:thin-air}; 31/34 published-example
+\noindent Scope: sound relative to Definition~\ref{def:thin-air}; \PublishedExampleAgreement~published-example
 agreement (\S\ref{sec:source-paper}) validates the definition. Not proved: DRF,
 Weakestmo correspondence.
 
@@ -646,9 +651,12 @@ Witness: LB with real dependency, size~4.
 \end{proposition}
 
 \noindent Both witnesses are encoder-specific (PSO$'$ retains cross-location
-W$\to$R order; 2/40 divergences from canonical PSO,
+W$\to$R order; \PsoCanonicalDivergences~divergences from canonical PSO,
 \texttt{eval/pso-canonical-comparison.csv}). Full mutual incomparability is
-not claimed. Verified on 2,998 tests: 0 hierarchy violations.
+not claimed. Verified on \CorpusSize~tests: \HierarchyViolations~hierarchy violations.
+The RA $\not\sqsupseteq$ WEAKEST witness is exhibited by \AtlasRaWeakestWitnesses~atlas
+programs (\texttt{eval/ra-formal-atlas.csv}); the sub-chain
+SC $\sqsupseteq$ TSO $\sqsupseteq$ RA has \AtlasSubchainViolations~violations there.
 
 \section{The Detector \texorpdfstring{$\sdepimpl$}{sdep\_impl}}
 \label{sec:detector}
@@ -662,7 +670,10 @@ $\sdepimpl$ is a per-static-site conservative approximation recognizing eight pa
 (1)~$r \oplus r$; (2)~$r*0$; (3)~$r+c-r$; (4)~$r\,\&\,0$; (5)~$r\,|\,\texttt{0xFF\ldots}$;
 (6)~$r \ll 32$; (7)~$r\,|\,(\sim r)$; (8)~constant propagation.
 Control: $\dep_{\mathrm{ctrl}} \subseteq \sdepimpl$ (conservative).
-Audit: 40/40 correct; QF\_BV oracle: 0 additional fakes on 2,998 tests.
+Audit: \DetectorEdges~realized dependency edges over the fragment
+(\DetectorFakeEdges~fake, \DetectorSemanticEdges~semantic,
+\DetectorRelevantEdges~verdict-relevant), 0 misclassifications on manual
+inspection; QF\_BV oracle: \QfbvChanged~classification changes on \QfbvTests~tests.
 
 \section{Empirical evaluation}
 \label{sec:evaluation}
@@ -672,51 +683,75 @@ Audit: 40/40 correct; QF\_BV oracle: 0 additional fakes on 2,998 tests.
 
 We evaluate the prototype on a corpus assembled from the herd7
 distribution~\cite{alglave2014herding} and the Dat3M benchmark
-suite~\cite{gavrilenko2019bmc}, totaling 12,324 litmus tests. The prototype
+suite~\cite{gavrilenko2019bmc}, totaling \CorpusFilesTotal~litmus tests. The prototype
 parses each test, wires a loader-supplied candidate execution, encodes it in
 SMT, and reports a per-model verdict (ALLOWED, FORBIDDEN, TIMEOUT, ERROR) for each of the five
 encoded models. The SMT back-end is Z3, configured with a 30-second wall-clock
 budget and a 64-event candidate bound per query.
 
-Of the 12,324 tests, 2,998 (24.3\%) are in the supported-syntax fragment: the
-prototype parses them, encodes them, and produces a per-model verdict within
-the budget. The remaining 9,326 tests fail to parse or fail to encode within
-the budget; \S\ref{sec:coverage} categorizes the failures. All empirical
-claims in this section concern the 2,998-test supported-syntax fragment.
+Of the \CorpusFilesTotal~tests, \CorpusSize~(\CoveragePercent\%) are in the
+supported-syntax fragment: the prototype parses them, encodes them, and produces a
+per-model verdict within the budget. The remaining \UnsupportedFiles~tests fail to
+parse, fail to encode within the budget, or use instructions outside the modeled
+vocabulary; \S\ref{sec:coverage} categorizes the failures. All empirical
+claims in this section concern the \CorpusSize-test supported-syntax fragment.
 
-The evaluation has six components: hierarchy preservation
-(\S\ref{sec:hierarchy-corollary}, full 2,998-test fragment), detector
+The evaluation has seven components: hierarchy preservation
+(\S\ref{sec:hierarchy-corollary}, full \CorpusSize-test fragment), detector
 ablation (\S\ref{sec:ablation}, 11 LB-family files, 200-test corpus
 slice, and exhaustive fake-dep sweep of all 231 fake-carrying tests),
-scalability (\S\ref{sec:scalability}, four parametric families up to
-64 events, polynomial growth confirmed), published-example validation
-against 34 examples from three independent sources
-(\S\ref{sec:source-paper}; 31/34 agreement, 2 divergences on the known
-control-dependency over-approximation, 1 on single-candidate encoding
-scope), an RC11 thin-air baseline (\S\ref{sec:rc11baseline}), and
+scalability (\S\ref{sec:scalability}, \ScalabilityFamilies~parametric families up to
+\ScalabilityMaxEvents~events, polynomial growth confirmed), published-example validation
+against \PublishedExampleTotal~examples from three independent sources
+(\S\ref{sec:source-paper}; \PublishedExampleAgreement~agreement), a Dat3M
+cross-check (\S\ref{sec:dat3m}; \DatThreeMagreement~agreement), an RC11
+thin-air baseline (\S\ref{sec:rc11baseline}), and
 herd7 cross-check (\S\ref{sec:herd7},
 shared subset; Tables~\ref{sec:herd7}--\ref{sec:herd7}). All
 claims are scoped to the supported-syntax fragment
 (\S\ref{sec:coverage}).
 
+\noindent\textbf{Wired and symbolic modes.} The prototype runs each test in two
+encodings. In \emph{wired} mode the loader fixes one reads-from and coherence
+wiring and the verdict is definitive for that candidate. In \emph{symbolic} mode
+the parser retains each write's value \emph{function} over the registers it reads;
+the encoder mints a bitvector value variable per read and per write, defines each
+write's value as the real function of the reads it depends on, couples
+$\rf(w,r) \Rightarrow \mathit{val}(r) = \mathit{val}(w)$, pins only the reads and
+locations the \texttt{exists} clause names, and lets $\co$ range freely. The verdict
+is then program-level: FORBIDDEN iff unsatisfiable over all reads-from, coherence,
+and value fixpoints. The consistency axioms are identical in both modes---they
+consume the same $\rf$ and $\co$ decision variables. Symbolic mode changes
+\SymbolicVerdictChanges~of \SymbolicCorpusTests~verdicts
+(\SymbolicAllowedToForbidden~ALLOWED$\to$FORBIDDEN, where the \texttt{exists}
+clause names a read value no write can produce, and
+\SymbolicForbiddenToAllowed~FORBIDDEN$\to$ALLOWED, where free coherence admits an
+execution the single wiring missed), with \SymbolicErrors~errors. Median symbolic
+solve time is \MedianRuntimeMs\,ms (p95 \PNinetyFiveRuntimeMs\,ms, max
+\MaxRuntimeMs\,ms). Except where stated otherwise, the numbers below are
+symbolic-mode results.
+
 The prototype is implemented in Java with a Z3 SMT back-end. The source code,
 the corpus, the per-test verdicts, and the artifacts supporting each empirical
-claim are available in the supplementary material.
+claim are available in the supplementary material. Every number quoted in this
+section is generated by \texttt{python eval/run\_all.py}, which writes
+\texttt{eval/results.json} and the \texttt{numbers.tex}/\texttt{tables.tex} inputs
+this document reads; none is typed by hand.
 
 \subsection{Empirical hierarchy preservation}
 \label{sec:hierarchy-corollary}
 
 We measure how often the encoded models agree on the consistency verdict for
-each candidate. Across the 2,998 supported-syntax tests and the four
+each candidate. Across the \HierarchyTests~supported-syntax tests and the four
 SC-to-weak edges (SC $\sqsupseteq$ TSO, SC $\sqsupseteq$ PSO, SC $\sqsupseteq$
-RA, SC $\sqsupseteq$ WEAKEST), no hierarchy violation is observed: every
+RA, SC $\sqsupseteq$ WEAKEST), \HierarchyViolations~hierarchy violations are observed: every
 execution that is SC-consistent is also $M$-consistent for each weak $M$.
 This is consistent with Theorem~\ref{thm:hierarchy}, validating the encoder implementation. 
 
-Our corpus logs record 6 Dat3M tests permitted by WEAKEST and forbidden by all four stronger models.\footnote{The six tests are listed by name in \texttt{corpus-validation-dat3m.csv} in the artifact; they are all PPC load-buffering variants with non-trivial dependency structure.} These are evidence that the WEAKEST model is behaviorally distinct from stronger models in the wild---not that the sdep stratification fires on these tests (the ablation shows the 200-test corpus slice is identical across all three configurations). (These six are also distinct from the 6 FORBIDDEN entries in \S\ref{sec:ablation}'s corpus-slice column, which are tests WEAKEST \emph{forbids} via $\mathsf{CoherencePerLocation}$.)
+Our corpus logs record \WeakestOnlyAllowed~tests permitted by WEAKEST and forbidden by all four stronger models.\footnote{They are listed by name in \texttt{eval/results.json} (\texttt{hierarchy} block) in the artifact; they are all PPC load-buffering variants with non-trivial dependency structure.} These are evidence that the WEAKEST model is behaviorally distinct from stronger models in the wild---not that the sdep stratification fires on these tests (the ablation shows the 200-test corpus slice is identical across all three configurations). (These six are also distinct from the 6 FORBIDDEN entries in \S\ref{sec:ablation}'s corpus-slice column, which are tests WEAKEST \emph{forbids} via $\mathsf{CoherencePerLocation}$.)
 
 For the intermediate edges (TSO $\sqsupseteq$ PSO, RA $\sqsupseteq$ WEAKEST),
-the corpus also exhibits no violations, despite
+the corpus exhibits \HierarchyIntermediateViolations~violations, despite
 Propositions~\ref{prop:tso-pso} and~\ref{prop:ra-weakest} establishing that
 these edges do not hold by construction. The corpus does not contain the
 constructions that exhibit the verified counterexamples; the corpus result is
@@ -732,13 +767,14 @@ Three configs on 11-test LB family + 200-test slice:
 (iii)~shipped $\sdepimpl$: all 11 tests correct.
 Exhaustive sweep of 231 fake-carrying tests: 2 independently-authored
 discriminating tests found (DETOUR0236, LB+datas; both correctly ALLOWED).
-QF\_BV oracle: 0 missed fakes on 2,998 tests.
+QF\_BV oracle: \QfbvChanged~classification changes on \QfbvTests~tests.
 
 \subsection{Scalability}
 \label{sec:scalability}
 
-We swept four parametric program families over $n \in \{2,\ldots,16\}$
-(6--64 events) across all five models using
+We swept \ScalabilityFamilies~parametric program families over
+$n \in \{\ScalabilityNMin,\ldots,\ScalabilityNMax\}$
+(up to \ScalabilityMaxEvents~events) across all five models using
 \texttt{wev.smt.cli.ScalabilitySweep}. The families are:
 $\mathsf{LBChain}(n)$ ($n$-thread LB ring with real data dependencies,
 $3n$ events, FORBIDDEN under WEAKEST for all $n$);
@@ -750,7 +786,7 @@ writers with two readers, $4n$ events).
 
 \begin{table}[ht]
 \centering
-\caption{Scalability summary at $n{=}16$ (max size). LBChain (FORBIDDEN)
+\caption{Scalability summary at $n{=}\ScalabilityNMax$ (max size). LBChain (FORBIDDEN)
 and LBFakeChain (ALLOWED) share identical event structure ($3n$ events);
 the verdict difference is pure dependency-content, not encoding cost.
 Times in ms; WEAKEST column is this paper's contribution.}
@@ -760,10 +796,7 @@ Times in ms; WEAKEST column is this paper's contribution.}
 \toprule
 Family & Verdict & SC & TSO & WEAKEST & PSO/RA (max) \\
 \midrule
-LBChain ($n{=}16$, 48 events)     & FORBIDDEN & 10 & 11 & 93  & $\sim$2000 \\
-LBFakeChain ($n{=}16$, 48 events) & ALLOWED   & 10 & 11 & 54  & $\sim$2000 \\
-SBNThread ($n{=}16$, 48 events)   & ALLOWED   &  8 &  9 & 18  & $\sim$1800 \\
-IRIWFan ($n{=}16$, 64 events)     & ALLOWED   & 10 & 12 & 39  & $\sim$5000 \\
+\ScalabilityTableBody
 \bottomrule
 \end{tabular}
 \end{table}
@@ -772,15 +805,15 @@ IRIWFan ($n{=}16$, 64 events)     & ALLOWED   & 10 & 12 & 39  & $\sim$5000 \\
 (near-linear for LBChain/LBFakeChain/SBNThread, mildly super-linear
 for IRIWFan at $b \approx 1.23$ on the clean $n \leq 12$ range). No
 family exceeds $2.5\times$/step growth. PSO and RA are the cost
-drivers ($\sim\!O(n^{1.8\text{--}2.0})$), reaching 2--5\,s at $n{=}16$;
-WEAKEST stays under 100\,ms at $n{=}16$.
+drivers ($\sim\!O(n^{1.8\text{--}2.0})$), peaking at \PsoRaMaxMs\,ms;
+the slowest WEAKEST query anywhere in the sweep is \WeakestMaxMs\,ms.
 
 \textbf{The punchline.} $\mathsf{LBChain}$ (FORBIDDEN) and
 $\mathsf{LBFakeChain}$ (ALLOWED) have identical event structure and
 identical event counts ($3n$). Their timing curves coincide through
-$n{=}12$ (ratio 0.92--1.11$\times$); the $n{=}16$ gap (93\,ms vs
-54\,ms, ratio 1.72$\times$) is UNSAT-proof overhead on the forbidden
-case, not encoding cost. Both stay orders of magnitude below PSO/RA.
+$n{=}12$; the $n{=}\ScalabilityNMax$ gap (\ScalLBChainWEAKEST\,ms vs
+\ScalLBFakeChainWEAKEST\,ms, ratio \LbRealFakeRatio$\times$) is UNSAT-proof
+overhead on the forbidden case, not encoding cost. Both stay orders of magnitude below PSO/RA.
 The verdict difference is a \emph{pure dependency-content effect}: same
 program shape, same encoding, different $\sdep$ membership, different
 verdict. Full timing data in \texttt{eval/scalability-consistency.csv};
@@ -808,23 +841,19 @@ Divergences are explained in the text.}
 \toprule
 Source & Examples encoded & Agreement & Divergences \\
 \midrule
-Weakestmo~\cite{chakraborty2019grounding}      & 8  & 8/8  & 0 \\
-Leaky Semicolon / PwT~\cite{jeffrey2022leaky}  & 6  & 5/6  & 1 \\
-JMM causality suite~\cite{manson2005java}       & 20 & 18/20 & 2 \\
-\midrule
-Total & 34 & 31/34 & 3 \\
+\SourcePaperTableBody
 \bottomrule
 \end{tabular}
 \end{table}
 
-\noindent\textbf{Weakestmo (8/8).} All eight examples from
+\noindent\textbf{Weakestmo (\WeakestmoAgreement).} All eight examples from
 Chakraborty and Vafeiadis agree with the checker. These include the
 standard LB, LBd, OOTA, LB+ctrl, MP, CoRR, CoRW, and CoWR variants;
 the checker returns FORBIDDEN on thin-air cases and ALLOWED on
 grounded ones, consistent with Weakestmo's classifications across all
 dependency types.
 
-\noindent\textbf{Leaky Semicolon / PwT (5/6).} Five of six PwT
+\noindent\textbf{Leaky Semicolon / PwT (\PwTExamplesAgreement).} Five of six PwT
 examples agree. The single divergence is \texttt{LBfc} (both-arms-write
 control dependency): both arms of the guard write the same value~1, so
 the store is unconditional and PwT allows the outcome; the checker's
@@ -835,31 +864,59 @@ Table~\ref{tab:fidelity}). On the data-dependency fragment---LB, LBd,
 LBfd ($a{+}1{-}a$), LBxor ($r{\oplus}r$), and LBcd---checker and PwT
 agree on all five cases.
 
-\noindent\textbf{JMM causality suite (18/20).} The JMM suite contains
-20 tests (TC01--TC20), each classified as \textit{should allow} or
-\textit{should forbid}~\cite{manson2005java}. The checker agrees on 18.
-The two divergences are:
+\noindent\textbf{JMM causality suite (\JmmExamplesAgreement).} The JMM suite contains
+\JmmTotal~tests (TC01--TC20), each classified as \textit{should allow} or
+\textit{should forbid}~\cite{manson2005java}. Under the wired
+single-candidate encoding the checker agrees on \JmmAgreementWired; under the
+symbolic reads-from and value-propagation encoding (\S\ref{sec:setup}) it
+agrees on \JmmAgreement. The two remaining divergences are:
 \begin{itemize}
 \item \textbf{TC04} (ALLOWED by JMM, FORBIDDEN by checker): both arms
 of a guard write $x{=}1$, so the dependency is redundant and the store
 is unconditional; the checker over-approximates the control edge as
 semantic---the same control-dependency limitation as \texttt{LBfc}.
-\item \textbf{TC06} (FORBIDDEN by JMM, ALLOWED by checker): the JMM
-forbids reading $x{=}2$ in a program where $x$ is only ever written
-0~or~1---an \emph{unreachable target} behavior. The single-candidate
-checker cannot pose an unreachable candidate; it only checks whether
-the reachable execution is consistent, which it is. This is an encoding
-scope limitation, not a soundness bug; it is documented in
-\S\ref{sec:coverage}.
+Symbolic value propagation does not touch control dependencies, so this
+divergence is unaffected by it.
+\item \textbf{TC13} (FORBIDDEN by the JMM label, ALLOWED by checker):
+with coherence order existentially quantified rather than fixed by the
+loader, a consistent execution exists. The checker here sides with
+Dat3M/LKMM against the JMM label; the wired encoding's FORBIDDEN was an
+artifact of the fixed coherence order.
 \end{itemize}
+The two divergences the wired encoding additionally exhibited---TC06 and
+TC18, where the \texttt{exists} clause names a read value that no write in
+the program can produce---are resolved by symbolic mode, which propagates
+real values along reads-from and finds the outcome value-unreachable.
 Full per-test results with explanations are in \texttt{eval/jmm-results.csv}
 in the artifact.
 
-\noindent Of the 3 divergences across 34 published examples, 2 (LBfc,
-TC04) arise from the known control-dependency over-approximation and 1
-(TC06) from the single-candidate encoding scope. On the data and address
-dependency fragment---the paper's primary claim---agreement is complete
-across all three independent sources.
+\noindent Of the \PublishedExampleDivergences~divergences across
+\PublishedExampleTotal~published examples, two (LBfc, TC04) arise from the
+known control-dependency over-approximation and one (TC13) from a
+disagreement between the JMM label and Dat3M/LKMM over existential
+coherence. On the data and address dependency fragment---the paper's
+primary claim---agreement is complete across all three independent sources.
+
+\subsection{Dat3M cross-check}
+\label{sec:dat3m}
+
+We additionally cross-check against Dat3M~\cite{gavrilenko2019bmc} on a
+\DatThreeMTotal-test set drawn from four provenances (the \PublishedExampleTotal~published
+examples above plus seven author-constructed LB-family programs), taking Dat3M's
+LKMM verdicts as the reference. Agreement is \DatThreeMagreementWired~under the wired
+encoding and \DatThreeMagreement~under symbolic mode; every one of the four tests that
+changes verdict moves \emph{toward} the Dat3M reference. The
+\DatThreeMdivergences~residual divergences are the fake-dependency family: Dat3M's LKMM
+forbids a $\po \cup \rf$ cycle syntactically, whereas WEAKEST admits it when the
+dependency carrying it folds to a constant. This is the intended behavioural
+difference, not an encoder defect---it is the same separation
+Table~\ref{tab:rc11-baseline} exhibits against RC11. Per-test verdicts, provenance
+suite, and solve times are in \texttt{eval/dat3m-comparison-v2.csv}.
+
+The encoder's own behaviour is pinned by a fixed validation ladder of nine
+programs spanning the real/fake separation, value-unreachable outcomes, and
+coherence-per-location (\LadderAgreement~pass, \texttt{wev.smt.cli.SymbolicRfRun
+ladder}).
 
 \subsection{RC11 thin-air baseline}
 \label{sec:rc11baseline}
@@ -879,20 +936,21 @@ in the artifact. The three wired tests produce:
 
 \begin{table}[ht]
 \centering
-\caption{RC11 thin-air baseline vs.\ WEAKEST on the wired LB family.
+\caption{RC11 thin-air baseline vs.\ WEAKEST on the LB family.
 RC11 uses $\mathsf{acyclic}(\po \cup \rf)$ (simplified; no
 release/acquire annotations). Agreement on genuine thin-air (LB-real);
-divergence on fake-dep grounded LB (three cases).}
+divergence on fake-dep grounded LB. Over the full direction check
+(\RcElevenTests~tests) RC11 forbids what WEAKEST allows in
+\RcElevenDivergences~cases and the reverse never occurs
+(\RcElevenReverseDivergences), which is
+Corollary~\ref{cor:rc11-containment} empirically.}
 \label{tab:rc11-baseline}
 \small
 \begin{tabular}{llllp{4.8cm}}
 \toprule
 Test & RC11 & WEAKEST & Agree? & Dependency type \\
 \midrule
-\texttt{LB-real}           & FORBIDDEN & FORBIDDEN & \checkmark & Real dep ($r{+}1$): genuine thin-air \\
-\texttt{LB-fake-xor-cycle} & FORBIDDEN & ALLOWED   & $\times$   & Fake XOR dep ($r{\oplus}r{=}1$): grounded LB \\
-\texttt{LBfd}              & FORBIDDEN & ALLOWED   & $\times$   & Fake lin-arith dep ($r{+}1{-}r{=}1$): grounded LB \\
-\texttt{DETOUR0236}        & FORBIDDEN & ALLOWED   & $\times$   & Fake dep (\texttt{xor r,r,r; +1}{$=1$}): grounded LB \\
+\RcElevenTableBody
 \bottomrule
 \end{tabular}
 \end{table}
@@ -909,38 +967,50 @@ WEAKEST admits. On a real dependency (LB-real), $\sdep$ edges coincide
 with the value-carrying $\po$ edges; the two graphs' cycles coincide,
 and the verdicts converge.
 
-The three divergence cases (LB-fake-xor-cycle, LBfd, DETOUR0236) are
-the paper's discriminating corpus tests: all carry a fake dependency
-whose write-side expression folds to a constant~1 regardless of what
-was read. The dependency detector correctly classifies all three as
-\texttt{sdepEdges=0}; WEAKEST's $\mathsf{acyclic}(\sdepimpl \cup \jf)$
-graph has no cycle and returns ALLOWED. RC11 ignores dependency
-provenance and returns FORBIDDEN for all three, over-restricting
-grounded load-buffering on the entire fake-dep family. Full per-test
-results with solve times are in \texttt{eval/rc11-comparison.csv} in
+The divergence cases are the paper's discriminating corpus tests: all
+carry a fake dependency whose write-side expression folds to a
+constant~1 regardless of what was read. The dependency detector
+correctly classifies each as \texttt{sdepEdges=0}; WEAKEST's
+$\mathsf{acyclic}(\sdepimpl \cup \jf)$ graph has no cycle and returns
+ALLOWED. RC11 ignores dependency provenance and returns FORBIDDEN,
+over-restricting grounded load-buffering on the entire fake-dep family.
+The same pattern holds for \texttt{DETOUR0236}, an independently
+authored PPC test outside the direction check's example directories.
+Full per-test results are in \texttt{eval/rc11-direction-check.csv} in
 the artifact.
 
 \subsection{herd7 cross-check}
 \label{sec:herd7}
 
-84--86\% SC/TSO agreement on non-ARM subset; 38\% ARM (MTE tests outside
-parser scope). All SC/TSO disagreements are CoWW/CoWR; co-enumeration
+On the non-ARM subset, \HerdNonArmSCPercent\% SC agreement
+(\HerdNonArmSCCompared~tests compared) and \HerdNonArmTSOPercent\% TSO
+(\HerdNonArmTSOCompared~tests); on ARM, \HerdArmSCPercent\%
+(\HerdArmSCCompared~tests), where the MTE tests fall outside parser scope.
+All SC/TSO disagreements are CoWW/CoWR; co-enumeration
 (\S\ref{sec:rc11baseline}) returns FORBIDDEN on all four, closing the gap.
 
 \subsection{Coverage}
 \label{sec:coverage}
 
-12,324 corpus files: 2,998 (24.3\%) validated; 7,461 skipped (unsupported
-instructions); 1,865 parse errors. 0 timeouts, 0 crashes. All claims scoped
-to the 2,998-test fragment.
+\CorpusFilesTotal~corpus files: \CorpusSize~(\CoveragePercent\%) validated;
+\SkippedUnsupported~skipped (unsupported instructions); \ParseErrors~parse
+errors; \ExcludedUnmodeled~excluded by the detector audit for carrying
+instructions outside the modeled vocabulary (conditional select/set,
+predicated moves, PC-relative branch targets, named branch labels,
+relocation symbols; \texttt{eval/layer2-excluded-tests.csv}). 0 timeouts,
+0 crashes. All claims scoped to the \CorpusSize-test fragment. Every
+value/address expression in that fragment is decided exactly by the QF\_BV
+constancy oracle: \LayerTwoSites~sites fall back to the conservative
+classification.
 
 \subsection{Threats}
 \label{sec:threats}
 
-\textbf{Fragment:} 24.3\%; architectural variants untested.
+\textbf{Fragment:} \CoveragePercent\%; architectural variants untested.
 \textbf{Control:} conservatively semantic; affects TC04, LBfc.
-\textbf{Single-candidate:} co-enumeration closes CoWW gap.
-\textbf{PSO$'$:} 2/40 divergences from canonical SPARC PSO.
+\textbf{Single-candidate:} symbolic reads-from and value propagation lift the
+verdict to program level; \SymbolicVerdictChanges~of \SymbolicCorpusTests~verdicts change.
+\textbf{PSO$'$:} \PsoCanonicalDivergences~divergences from canonical SPARC PSO.
 \textbf{Z3:} standard SMT engineering dependency.
 
 \section{Related Work}
@@ -959,8 +1029,8 @@ event structures; we inherit $\jf$ but operate on one candidate.
 Moiseenko et al.~\cite{moiseenko2020compilation} prove compilation
 Weakestmo$\to$IMM. Promising~\cite{kang2017promising} certifies via future
 executions. PwT~\cite{jeffrey2022leaky} has identical axiom with
-multi-execution $\sdep$; Proposition~\ref{prop:pwt-equiv} shows 100\%
-agreement on branch-free arithmetic (80/80). MRD~\cite{paviotti2020mrd}
+multi-execution $\sdep$; Proposition~\ref{prop:pwt-equiv} shows full
+agreement on branch-free arithmetic (\PwtAgreement). MRD~\cite{paviotti2020mrd}
 gives a denotational semantics.
 
 \paragraph{SMT-based tools.}
@@ -977,9 +1047,10 @@ our QF\_BV SMT on single candidates with OMT.
 \label{sec:limitations}
 
 \textbf{Control:} conservatively semantic; TC04 and LBfc divergences.
-\textbf{Fragment:} 24.3\% coverage. \textbf{Single-candidate:} co-enumeration
-closes CoWW gap; symbolic enumeration is future work. \textbf{PSO$'$:}
-non-canonical; 2/40 atlas divergences. \textbf{Compiler transformations:}
+\textbf{Fragment:} \CoveragePercent\% coverage. \textbf{Single-candidate:}
+symbolic reads-from and value propagation lift verdicts to program level;
+richer candidate enumeration is future work. \textbf{PSO$'$:}
+non-canonical; \PsoCanonicalDivergences~atlas divergences. \textbf{Compiler transformations:}
 strength reduction changes fake site to semantic; compilation correctness
 requires multi-execution~\cite{sevcik2011c11comp,chakraborty2019grounding}.
 \textbf{No meta-theory:} DRF, Weakestmo/Promising correspondence,
@@ -996,7 +1067,7 @@ operational certification, without multi-execution machinery. The answer is
 yes, conditionally: for programs in the supported-syntax fragment, the
 semantic/syntactic dependency distinction is enough. The condition
 $\jfCoherence \triangleq \mathsf{acyclic}(\sdep \cup \jf)$ is decidable,
-SMT-encodable, and validated on 2,998 litmus tests. The broader implication
+SMT-encodable, and validated on \CorpusSize~litmus tests. The broader implication
 is that this setting, conventionally viewed as too impoverished to express
 the thin-air distinction, has more structure than prior work
 assumed---specifically, it has value-flow structure at the level of individual
@@ -1031,8 +1102,11 @@ alone.
 \end{lemma}
 
 \section{herd7 Agreement (full tables in artifact)}
-Full SC/TSO agreement tables are in \texttt{eval/herd7-results.csv}.
-Headline: 84\% SC agreement on X86/PPC, 38\% ARM (MTE gap); 74\% TSO on X86.
+Full SC/TSO agreement tables are in \texttt{eval/herd7-results.csv} and
+\texttt{eval/herd7-wev-verdicts.csv}; the joined counts are in the
+\texttt{herd7} block of \texttt{eval/results.json}.
+Headline: \HerdNonArmSCPercent\% SC agreement on the non-ARM subset,
+\HerdArmSCPercent\% on ARM (MTE gap); \HerdNonArmTSOPercent\% TSO on non-ARM.
 
 %%% Bibliography
 \bibliographystyle{splncs04}

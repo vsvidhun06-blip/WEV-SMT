@@ -113,7 +113,7 @@ public final class LitmusParser {
      * sets the sink, parses one file, drains it, single-threaded.
      */
     public record DepDecision(String expr, String reg, boolean real, String pattern,
-                              List<Integer> producerReadIds) { }
+                              List<Integer> producerReadIds, int threadId, int instrIndex) { }
 
     /** Optional sink for {@link DepDecision}s; {@code null} (the default) disables tracing. */
     public static volatile java.util.function.Consumer<DepDecision> DEP_TRACE = null;
@@ -240,6 +240,23 @@ public final class LitmusParser {
         final Map<String, List<WriteEvent>> programWrites = new LinkedHashMap<>();
         final Map<String, ReadEvent> readByThreadReg = new LinkedHashMap<>();    // "P:reg" -> last read
 
+        // Current site being lowered (for DepDecision tracing / the Layer-2 audit): the
+        // WEV thread id and the 0-based instruction index within the thread. Inert unless
+        // DEP_TRACE is installed; updated by buildThread as it walks each thread's rows.
+        int curThreadId = 0;
+        int curInstrIndex = -1;
+
+        // C1 symbolic value model (additive; never changes the folded constant values). Per
+        // WriteEvent id, the symbolic value expression as a string over R<readId> variables,
+        // integer literals and the QF_BV operators (e.g. "R5+1", "R3^R3^1", "2"); per
+        // exists-named ReadEvent id, the value the exists clause pins it to. Consumed only by
+        // SymbolicRfEncoder; ignored in wired mode. See parse/SYMBOLIC_RF_DESIGN.md.
+        final Map<Integer, String> writeValueExprs = new LinkedHashMap<>();
+        final Map<Integer, Integer> existsReadValues = new LinkedHashMap<>();
+        // C1: memory-final constraints from the exists clause (loc=val, no thread:reg), for
+        // symbolic coherence tests (CoWW/CoWR family) whose outcome pins the co-maximal value.
+        final Map<String, Integer> existsMemFinal = new LinkedHashMap<>();
+
         Job(String content, String sourceName) {
             this.src = sourceName;
             this.lines = content.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1);
@@ -262,7 +279,8 @@ public final class LitmusParser {
                         "[" + src + "] parsed structure is invalid", report);
             }
             return new LitmusCase(src, arch, name, es, deps, existsClause,
-                    expectations, herdObservation);
+                    expectations, herdObservation, writeValueExprs, existsReadValues,
+                    existsMemFinal);
         }
 
         // ── Comments → expectations ───────────────────────────────────────────
@@ -563,6 +581,7 @@ public final class LitmusParser {
             return threads;
         }
 
+
         private String joinLines(int from, int to) {
             StringBuilder sb = new StringBuilder();
             for (int k = from; k < to; k++) {
@@ -593,15 +612,22 @@ public final class LitmusParser {
             int threadId = pIndex + 1;                       // thread 0 reserved for inits
             Map<String, RegSrc> regEnv = new LinkedHashMap<>();
             Map<String, String> addrEnv = new LinkedHashMap<>();
+            // C1: per-register symbolic value string (over R<readId> vars + literals), the
+            // dataflow the constant folding erases. Kept in lockstep with regEnv.
+            Map<String, String> regSymbolic = new LinkedHashMap<>();
             // Seed from thread-local init bindings.
             regConstInit.getOrDefault(pIndex, Map.of())
-                    .forEach((r, v) -> regEnv.put(r, RegSrc.constant(v)));
+                    .forEach((r, v) -> { regEnv.put(r, RegSrc.constant(v));
+                                          regSymbolic.put(r, Integer.toString(v)); });
             addrEnv.putAll(regAddrInit.getOrDefault(pIndex, Map.of()));
 
             List<ReadEvent> ctrlReads = new ArrayList<>();
             Event prevMem = null;
 
-            for (RawInstr ri : rawInstrs) {
+            for (int instrIdx = 0; instrIdx < rawInstrs.size(); instrIdx++) {
+                RawInstr ri = rawInstrs.get(instrIdx);
+                curThreadId = threadId;
+                curInstrIndex = instrIdx;
                 Insn in = lex(ri);
                 switch (in.kind()) {
                     case NOP -> { /* no event in the WEV model */ }
@@ -611,8 +637,14 @@ public final class LitmusParser {
                         es.addEvent(f);
                         prevMem = link(prevMem, f);
                     }
-                    case IMM -> regEnv.put(in.reg(), RegSrc.constant(parseIntLit(in.expr())));
-                    case ASSIGN -> regEnv.put(in.reg(), deriveReg(in.expr(), regEnv));
+                    case IMM -> {
+                        regEnv.put(in.reg(), RegSrc.constant(parseIntLit(in.expr())));
+                        regSymbolic.put(in.reg(), Integer.toString(parseIntLit(in.expr())));
+                    }
+                    case ASSIGN -> {
+                        regEnv.put(in.reg(), deriveReg(in.expr(), regEnv));
+                        regSymbolic.put(in.reg(), substituteSymbolic(in.expr(), regSymbolic));
+                    }
                     case BRANCH -> ctrlReads.addAll(
                             readsOf(referencedReads(in.expr(), regEnv)));
                     case LOAD -> {
@@ -622,6 +654,7 @@ public final class LitmusParser {
                         prevMem = link(prevMem, rd);
                         seenLocation(loc);
                         regEnv.put(in.reg(), RegSrc.ofRead(rd));
+                        regSymbolic.put(in.reg(), "R" + rd.getId());   // C1: register holds this read
                         readByThreadReg.put(pIndex + ":" + in.reg(), rd);
                         addAddrDeps(rd, in, regEnv);
                     }
@@ -634,6 +667,11 @@ public final class LitmusParser {
                         prevMem = link(prevMem, wr);
                         seenLocation(loc);
                         programWrites.computeIfAbsent(loc, k -> new ArrayList<>()).add(wr);
+                        // C1: retain the symbolic value function (over R<readId>), not just
+                        // the folded constant, so SymbolicRfEncoder can propagate real values.
+                        writeValueExprs.put(wr.getId(), in.expr() == null
+                                ? Integer.toString(value)
+                                : substituteSymbolic(in.expr(), regSymbolic));
                         addDataDeps(wr, in.expr(), regEnv);
                         addAddrDeps(wr, in, regEnv);
                         for (ReadEvent cr : ctrlReads) deps.addCtrlDep(wr, cr, true);
@@ -654,11 +692,15 @@ public final class LitmusParser {
                         prevMem = link(prevMem, u);
                         seenLocation(loc);
                         programWrites.computeIfAbsent(loc, k -> new ArrayList<>()).add(u);
+                        // C1: RMW value functions are not modelled — the written value is a
+                        // constant placeholder, so its symbolic value is that literal too.
+                        writeValueExprs.put(u.getId(), Integer.toString(newV));
                         addAddrDeps(u, in, regEnv);
                         if (in.reg() != null) {
                             // No separate read event to track; the loaded value flows on as
                             // a constant (RMW-carried dependencies are not modelled).
                             regEnv.put(in.reg(), RegSrc.constant(oldV));
+                            regSymbolic.put(in.reg(), Integer.toString(oldV));
                         }
                     }
                 }
@@ -673,12 +715,37 @@ public final class LitmusParser {
 
         private void seenLocation(String loc) {
             if (locations.add(loc)) {
+                int initVal = initValues.getOrDefault(loc, 0);
                 WriteEvent init = new WriteEvent(0, loc, MemoryOrder.RELAXED,
-                        initValues.getOrDefault(loc, 0),
-                        Integer.toString(initValues.getOrDefault(loc, 0)));
+                        initVal, Integer.toString(initVal));
                 es.addEvent(init);
                 initOf.put(loc, init);
+                writeValueExprs.put(init.getId(), Integer.toString(initVal));  // C1
             }
+        }
+
+        /**
+         * C1: rewrite a value expression into the symbolic string the {@link SymbolicRfEncoder}
+         * consumes — every register identifier replaced by its {@code regSymbolic} definition
+         * (parenthesised), so the result contains only {@code R<readId>} variables, integer
+         * literals and QF_BV operators. A register with no definition (never loaded/assigned)
+         * folds to {@code 0}, matching {@code ExprEval}'s treatment of an unknown identifier,
+         * so the symbolic value of a constant store is identical to its folded constant.
+         */
+        private static String substituteSymbolic(String expr, Map<String, String> regSymbolic) {
+            if (expr == null) return "0";
+            StringBuilder out = new StringBuilder();
+            Matcher m = IDENT.matcher(expr);
+            int last = 0;
+            while (m.find()) {
+                out.append(expr, last, m.start());
+                String id = m.group();
+                String sym = regSymbolic.get(id);
+                out.append(sym != null ? "(" + sym + ")" : "0");
+                last = m.end();
+            }
+            out.append(expr.substring(last));
+            return out.toString();
         }
 
         private String resolveLoc(Insn in, Map<String, String> addrEnv, RawInstr ri) {
@@ -773,7 +840,8 @@ public final class LitmusParser {
                 if (trace != null) {
                     List<Integer> ids = new ArrayList<>();
                     for (ReadEvent r : s.reads().keySet()) ids.add(r.getId());
-                    trace.accept(new DepDecision(expr, reg, v.real(), v.pattern(), ids));
+                    trace.accept(new DepDecision(expr, reg, v.real(), v.pattern(), ids,
+                            curThreadId, curInstrIndex));
                 }
             }
             return acc;
@@ -793,6 +861,9 @@ public final class LitmusParser {
 
         private static final Pattern EXISTS_REG = Pattern.compile(
                 "(\\d+)\\s*:\\s*([A-Za-z_]\\w*)\\s*=\\s*(-?\\d+|0x[0-9A-Fa-f]+)");
+        // A bare location constraint loc=val (the '(?<![:\w])' excludes the reg of N:reg=val).
+        private static final Pattern EXISTS_MEM = Pattern.compile(
+                "(?<![:\\w])([A-Za-z_]\\w*)\\s*=\\s*(-?\\d+|0x[0-9A-Fa-f]+)");
 
         private void wireReadsFrom() {
             Map<String, Integer> required = new LinkedHashMap<>();
@@ -800,9 +871,20 @@ public final class LitmusParser {
             while (m.find()) {
                 required.put(m.group(1) + ":" + m.group(2), parseIntLit(m.group(3)));
             }
+            // C1: memory-final constraints (bare loc=val for a real location).
+            Matcher mm = EXISTS_MEM.matcher(existsClause);
+            while (mm.find()) {
+                if (locations.contains(mm.group(1))) {
+                    existsMemFinal.put(mm.group(1), parseIntLit(mm.group(2)));
+                }
+            }
             for (Event e : es.getEvents()) {
                 if (!(e instanceof ReadEvent rd)) continue;
                 Integer want = requiredValueFor(rd, required);
+                // C1: record which reads the exists clause actually pins (want != null). Reads
+                // it does not name stay free under symbolic enumeration (unlike wired mode,
+                // which pins them to the initial write).
+                if (want != null) existsReadValues.put(rd.getId(), want);
                 WriteEvent target = chooseWrite(rd.getVariable(), want == null ? 0 : want);
                 es.addReadsFrom(rd, target);
             }
@@ -1256,18 +1338,23 @@ public final class LitmusParser {
                     R + "\\*0", "0\\*" + R, R + "&0", "0&" + R
             };
             String[] toZeroName = { "r^r", "r-r", "r&~r", "~r&r", "r*0", "0*r", "r&0", "0&r" };
+            // Precedence of each idiom's TOP-LEVEL operator, used by foldSubterms to check
+            // that a textual match is really a sub-term. Order matches toZero/toOnes.
+            int[] toZeroPrec = { PREC_XOR, PREC_ADD, PREC_AND, PREC_AND,
+                                 PREC_MUL, PREC_MUL, PREC_AND, PREC_AND };
             String[] toOnes = { R + "\\|~" + R, "~" + R + "\\|" + R };
             String[] toOnesName = { "r|~r", "~r|r" };
+            int[] toOnesPrec = { PREC_OR, PREC_OR };
             LinkedHashSet<String> fired = new LinkedHashSet<>();
             boolean changed = true;
             while (changed) {
                 changed = false;
                 for (int i = 0; i < toZero.length; i++) {
-                    String n = e.replaceAll(bounded(toZero[i]), "0");
+                    String n = foldSubterms(e, bounded(toZero[i]), "0", toZeroPrec[i]);
                     if (!n.equals(e)) { e = n; changed = true; fired.add(toZeroName[i]); }
                 }
                 for (int i = 0; i < toOnes.length; i++) {
-                    String n = e.replaceAll(bounded(toOnes[i]), "1");
+                    String n = foldSubterms(e, bounded(toOnes[i]), "1", toOnesPrec[i]);
                     if (!n.equals(e)) { e = n; changed = true; fired.add(toOnesName[i]); }
                 }
             }
@@ -1360,6 +1447,90 @@ public final class LitmusParser {
 
         private static String bounded(String p) {
             return "(?<![A-Za-z0-9_])(?:" + p + ")(?![A-Za-z0-9_])";
+        }
+
+        // ── Precedence-aware idiom folding ───────────────────────────────────────────
+        //
+        // Operator precedence of the modelled QF_BV grammar, low → high:
+        //     |   ^   &   + -   *   unary ~ -
+        // (identical to QfbvConstancyOracle's recursive-descent parser).
+
+        private static final int PREC_OR = 1, PREC_XOR = 2, PREC_AND = 3,
+                                 PREC_ADD = 4, PREC_MUL = 5, PREC_UNARY = 6;
+
+        private static int precOf(char c) {
+            return switch (c) {
+                case '|' -> PREC_OR;
+                case '^' -> PREC_XOR;
+                case '&' -> PREC_AND;
+                case '+', '-' -> PREC_ADD;
+                case '*' -> PREC_MUL;
+                case '~' -> PREC_UNARY;
+                default -> -1;
+            };
+        }
+
+        /**
+         * Replace every occurrence of {@code pattern} in {@code e} that is a genuine
+         * <em>sub-term</em> by {@code repl}, leaving occurrences that merely appear as
+         * substrings untouched.
+         *
+         * <p>The cancellation idioms ({@code r^r}, {@code r-r}, {@code r&~r}, …) are only
+         * value-preserving rewrites when the matched text is the complete operand structure
+         * the idiom describes. Matching on the raw string is not sufficient: {@code
+         * ~r0-r0} <em>contains</em> {@code r0-r0}, but parses as {@code (~r0)-r0 =
+         * -2*r0-1}, which is not constant. Folding it to {@code ~0} loses the register and
+         * the detector then reports a genuinely value-carrying dependency as fake — an
+         * <em>unsound</em> classification, since it removes an edge from {@code sdep}.
+         *
+         * <p>Given the precedence {@code p} of the idiom's top-level operator, a match at
+         * {@code [s,t)} is a sub-term exactly when neither neighbour steals an operand:
+         * <ul>
+         *   <li><b>left</b>: start-of-string, {@code '('}, or an operator binding
+         *       <em>strictly looser</em> than {@code p}. Equal precedence is rejected
+         *       because the grammar is left-associative — in {@code a^r0^r0} the parse is
+         *       {@code (a^r0)^r0}, so the trailing {@code r0^r0} is not a sub-term.</li>
+         *   <li><b>right</b>: end-of-string, {@code ')'}, or an operator binding
+         *       <em>no tighter</em> than {@code p}. Equal precedence is accepted here, for
+         *       the same left-associativity reason — in {@code r0^r0^1} the leading
+         *       {@code r0^r0} <em>is</em> the left child.</li>
+         * </ul>
+         *
+         * <p>The check is conservative: when in doubt the fold is skipped, leaving the
+         * register mentioned and the dependency classified semantic. Skipping a legitimate
+         * fold costs precision (a fake edge reported real); performing an illegitimate one
+         * costs soundness. Only the latter is unacceptable.
+         */
+        private static String foldSubterms(String e, String pattern, String repl, int p) {
+            Matcher m = Pattern.compile(pattern).matcher(e);
+            StringBuilder out = new StringBuilder();
+            int last = 0;
+            while (m.find()) {
+                if (!isSubterm(e, m.start(), m.end(), p)) continue;
+                out.append(e, last, m.start()).append(repl);
+                last = m.end();
+            }
+            if (last == 0) return e;
+            return out.append(e.substring(last)).toString();
+        }
+
+        /** Whether the match {@code e[s,t)} of an idiom with top precedence {@code p} is a sub-term. */
+        private static boolean isSubterm(String e, int s, int t, int p) {
+            if (s > 0) {
+                char l = e.charAt(s - 1);
+                if (l != '(') {
+                    int lp = precOf(l);
+                    if (lp < 0 || lp >= p) return false;   // binds at least as tightly
+                }
+            }
+            if (t < e.length()) {
+                char r = e.charAt(t);
+                if (r != ')') {
+                    int rp = precOf(r);
+                    if (rp < 0 || rp > p) return false;    // binds more tightly
+                }
+            }
+            return true;
         }
 
         // ── Constant evaluation (for write values; substitutes loads as 0) ────────────

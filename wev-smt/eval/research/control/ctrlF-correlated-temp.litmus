@@ -1,0 +1,8 @@
+C ctrlF-correlated-temp
+(* GATE 2 case F: correlated temporary. t = r0 + 1, and the true arm writes       *)
+(* t - r0, which is the constant 1 -- matching the false arm. Expected: the       *)
+(* effect is constant 1 wrt r0, hence FAKE, if the case lies inside the fragment. *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); t = r0 + 1; if (r0 == 1) WRITE_ONCE(*x, t - r0); else WRITE_ONCE(*x, 1); }
+P1(int *x, int *y) { r1 = READ_ONCE(*x); WRITE_ONCE(*y, 1); }
+exists (0:r0=1 /\ 1:r1=1)

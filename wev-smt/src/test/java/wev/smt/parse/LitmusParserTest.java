@@ -378,6 +378,76 @@ class LitmusParserTest {
         assertStructurallyEqual(corpus(corpusName), parsed.es(), what);
     }
 
+    // ── Regression: precedence-aware idiom folding ──────────────────────────────
+    //
+    // The cancellation folder used to rewrite the expression STRING, so a pattern could
+    // match text that is not a sub-term. `~r0 - r0` contains the substring `r0-r0`, but
+    // parses as `(~r0) - r0 = -2*r0 - 1`, which is NOT constant. Folding it produced `~0`,
+    // the register vanished, and the detector reported a genuinely value-carrying
+    // dependency as fake — dropping an edge from sdep, which is unsound.
+    //
+    // These tests pin both directions: the previously-misclassified witnesses must be
+    // semantic, and the genuine cancellations must still fold.
+
+    /** Every witness reported in findings-attack-impossibility.md §9. */
+    @Test
+    void precedenceSpanningMatchesAreNotFolded() {
+        // value, and why it varies with r0
+        String[][] witnesses = {
+                { "~r0 - r0",           "(~r0) - r0 == -2*r0 - 1" },
+                { "r0 ^ r0 + 1",        "r0 ^ (r0 + 1)" },
+                { "r0 & ~r0 + 1",       "r0 & (~r0 + 1) == r0 & -r0, the lowest set bit" },
+                { "r0 & r0 - r0 + 3",   "r0 & ((r0 - r0) + 3) == r0 & 3" },
+                { "~7 - r0 ^ r0",       "(~7 - r0) ^ r0" },
+                { "~r0 ^ r0 + r0 ^ r0", "(~r0) ^ (r0 + r0) ^ r0" },
+        };
+        for (String[] w : witnesses) {
+            assertEquals(1, semanticEdgeCount(w[0]),
+                    "`" + w[0] + "` must stay SEMANTIC: " + w[1]);
+        }
+    }
+
+    /** The folds that genuinely are sub-terms must still fire — no precision regression. */
+    @Test
+    void genuineCancellationsStillFold() {
+        String[] fake = {
+                "r0 ^ r0",          // whole expression
+                "r0 - r0",
+                "r0 & 0",
+                "r0 * 0",
+                "r0 & ~r0",
+                "r0 ^ r0 ^ 1",      // LBxor: left-assoc, so `r0 ^ r0` IS the left child
+                "r0 + 1 - r0",      // LBfd: reaches the linear-cancellation pass
+        };
+        for (String e : fake) {
+            assertEquals(0, semanticEdgeCount(e),
+                    "`" + e + "` is a genuine cancellation and must fold to fake");
+        }
+    }
+
+    /** Ordinary value-carrying expressions are unaffected. */
+    @Test
+    void genuineDependenciesRemainSemantic() {
+        for (String e : new String[] { "r0", "r0 + 1", "r0 & r0", "r0 ^ 1" }) {
+            assertEquals(1, semanticEdgeCount(e),
+                    "`" + e + "` carries a real value flow");
+        }
+    }
+
+    /**
+     * Semantic data-dependency edges for {@code P0: r0 = READ_ONCE(*x); WRITE_ONCE(*y, value)}.
+     * Note the value must contain no parentheses and no {@code |}: the C dialect truncates a
+     * {@code WRITE_ONCE} value at the first {@code ')'} and treats {@code |} as the
+     * thread-column separator. Both are pre-existing front-end limitations, unrelated to the
+     * folding fix.
+     */
+    private static long semanticEdgeCount(String value) {
+        LitmusCase lc = LitmusParser.parse(
+                "C FOLD\n{ }\n P0 ;\n r0 = READ_ONCE(*x) ;\n WRITE_ONCE(*y, "
+                        + value + ") ;\nexists (0:r0=1)\n", "fold.litmus");
+        return lc.deps().allEdges().stream().filter(e -> e.edge().isSemantic()).count();
+    }
+
     private static EventStructure corpus(String name) {
         List<LitmusCorpus.LitmusCase> cases = LitmusCorpus.classics();
         return cases.stream()

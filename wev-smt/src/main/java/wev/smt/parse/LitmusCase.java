@@ -44,7 +44,21 @@ public record LitmusCase(
         DependencyInfo deps,
         String existsClause,
         Map<MemoryModel, Outcome> expectations,
-        String herdObservation) {
+        String herdObservation,
+        Map<Integer, String> writeValueExprs,
+        Map<Integer, Integer> existsReadValues,
+        Map<String, Integer> existsMemFinal) {
+
+    /**
+     * Backward-compatible constructor without the C1 symbolic value model (used by callers
+     * that only need the wired encoding). The value-model maps default to empty.
+     */
+    public LitmusCase(String sourceName, LitmusParser.Arch arch, String name,
+            EventStructure es, DependencyInfo deps, String existsClause,
+            Map<MemoryModel, Outcome> expectations, String herdObservation) {
+        this(sourceName, arch, name, es, deps, existsClause, expectations, herdObservation,
+                Map.of(), Map.of(), Map.of());
+    }
 
     /** The true number of events in the structure (includes the initial writes). */
     public int eventCount() {

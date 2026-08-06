@@ -1,0 +1,8 @@
+# toolchain provenance for eval/mined/asm/*.s
+# generated 2026-07-28T13:28:19Z on Linux 6.6.87.2-microsoft-standard-WSL2 x86_64
+
+clang:                 Ubuntu clang version 18.1.3 (1ubuntu1)
+gcc:                   gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+aarch64-linux-gnu-gcc: aarch64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+
+flags: -O2 -S -fno-asynchronous-unwind-tables -fomit-frame-pointer

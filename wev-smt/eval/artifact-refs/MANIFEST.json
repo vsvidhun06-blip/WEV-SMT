@@ -1,0 +1,12 @@
+{
+  "base_commit": "dc6fb602e67a800d996033806936ee155b7f523b",
+  "note": "working tree contained pre-existing uncommitted changes at session start; no git tag was created so as not to fold unrelated uncommitted work into a tagged artifact",
+  "sha256_16": {
+    "src/main/java/wev/smt/parse/LitmusParser.java": "be8f33384561a8d7",
+    "src/test/java/wev/smt/parse/LitmusParserTest.java": "98185e1902cf12db",
+    "eval/pre-fix-snapshot.json": "c9b15191e9cec630",
+    "eval/post-fix-snapshot.json": "e5df7b38294ad2cb",
+    "eval/numbers.tex": "ed320eb2d2bde9ca",
+    "eval/tables.tex": "4624b4735a97dd1e"
+  }
+}

@@ -1,0 +1,12 @@
+headline,original,original_numerator,original_denominator,excluded,excluded_hits,new_numerator,new_denominator,unaffected_subset,note
+PublishedExampleAgreement,31/34,31,34,10,8,23,24,23/24,symbolic mode; = source-paper(14) + JMM(20)
+JmmAgreement,18/20,18,20,7,6,12,13,12/13,symbolic mode
+JmmAgreementWired,17/20,17,20,7,6,11,13,11/13,wired mode
+PwTExamplesAgreement,5/6,5,6,2,1,4,4,4/4,
+WeakestmoAgreement,8/8,8,8,1,1,7,7,7/7,
+DatThreeMagreement,35/41,35,41,12,12,23,29,23/29,symbolic mode
+DatThreeMagreementWired,31/41,31,41,12,12,19,29,19/29,wired mode
+RcElevenAgree,21/27,21,27,9,9,12,18,12/18,
+CorpusSize / HierarchyTests / QfbvTests,2972/2972,2972,2972,19,19,2953,2953,2953/2953,all corpus control tests are asm-dialect or loops; 17 of them encode zero events
+Anchor/discriminating,2/34,2,34,10,0,2,24,2/24,no control edge is ever classified fake (ctrlFake=0 on every row)
+herd7 (SC/TSO agreement),unchanged,,,0,0,,,unchanged,0 of the 19 corpus control tests appear in the herd7 comparison population

@@ -1,8 +1,19 @@
 C TC18
-(* JMM causality test case 18 (Pugh 2004). Three-thread structure: P0 data dep y<-x;   *)
-(* P1 reads y, writes x=1 UNCONDITIONALLY, then writes z from y; P2 data dep x<-z. The  *)
-(* unconditional x=1 on P1 supplies a non-dependent justification. JMM DECISION:        *)
-(* ALLOWED. Encoded with the r+1 idiom on the dependent stores and the explicit x=1.    *)
+(* JMM causality test case 18 (Pugh 2004). Three-thread structure: P0 data dep y<-x;    *)
+(* P1 reads y, writes x=1 UNCONDITIONALLY, then writes z from y; P2 data dep x<-z.       *)
+(*                                                                                       *)
+(* CORRECTED VERDICT (C2): FORBIDDEN. The exists is VALUE-UNREACHABLE as encoded:        *)
+(* 0:r0=1 => P0 read x=1 => P0 writes y=r0+1=2, so y in {0(init),2}; but 1:r0=1 needs    *)
+(* P1 to read y=1, which no write produces. So (0:r0=1 /\ 1:r0=1) is unsatisfiable under *)
+(* real value propagation => FORBIDDEN under any sound model (Dat3M/LKMM agrees). The    *)
+(* previous "ALLOWED" label reflected WEV's WIRED value abstraction (evalConst models    *)
+(* y=r0+1 as the constant 1, fabricating a spurious y=1 write), the same limitation as   *)
+(* TC06 -- NOT the JMM decision. WEV wired mode still reports ALLOWED here; the FORBIDDEN *)
+(* verdict is recovered only by symbolic-rf real-value propagation (workstream C1).      *)
+(* NOTE: program preserved verbatim -- Pugh's authoritative TC18 program is not in this  *)
+(* repo, so no structural re-encoding was fabricated; only the mislabeled verdict is     *)
+(* corrected. See eval/rf-enumeration-analysis.md (section 4) and eval/jmm-provenance-   *)
+(* verified.md.                                                                          *)
 { }
 P0(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); }
 P1(int *x, int *y, int *z) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, 1); WRITE_ONCE(*z, r0 + 1); }

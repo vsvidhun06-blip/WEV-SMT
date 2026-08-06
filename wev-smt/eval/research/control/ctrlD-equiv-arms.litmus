@@ -1,0 +1,8 @@
+C ctrlD-equiv-arms
+(* GATE 2 case D: semantically equivalent but syntactically nontrivial arms.      *)
+(* r0 ^ r0 folds to 0, matching the other arm, so the effect is the constant 0.   *)
+(* Expected: FAKE.                                                                *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); if (r0 == 1) WRITE_ONCE(*x, r0 ^ r0); else WRITE_ONCE(*x, 0); }
+P1(int *x, int *y) { r1 = READ_ONCE(*x); WRITE_ONCE(*y, 1); }
+exists (0:r0=1 /\ 1:r1=1)

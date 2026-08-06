@@ -1,0 +1,8 @@
+C ctrlB-real
+(* GATE 2 case B: real control. The arms write DIFFERENT literals, so the effect  *)
+(* genuinely moves with r and N4 holds. Expected: the semantic control edge is    *)
+(* retained and the thin-air cycle remains forbidden.                            *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); if (r0 == 1) WRITE_ONCE(*x, 1); else WRITE_ONCE(*x, 0); }
+P1(int *x, int *y) { r1 = READ_ONCE(*x); if (r1 == 1) WRITE_ONCE(*y, 1); else WRITE_ONCE(*y, 0); }
+exists (0:r0=1 /\ 1:r1=1)

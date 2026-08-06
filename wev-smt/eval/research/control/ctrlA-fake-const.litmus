@@ -1,0 +1,9 @@
+C ctrlA-fake-const
+(* GATE 2 case A: fake constant control. Both arms write the SAME literal, so the *)
+(* observable write effect is the constant 1 and N4 fails: the control edge is    *)
+(* fake. Expected: current dep_ctrl retains the edges; the semantic prototype     *)
+(* removes them; the grounded LB candidate becomes admissible.                    *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); if (r0 == 1) WRITE_ONCE(*x, 1); else WRITE_ONCE(*x, 1); }
+P1(int *x, int *y) { r1 = READ_ONCE(*x); if (r1 == 1) WRITE_ONCE(*y, 1); else WRITE_ONCE(*y, 1); }
+exists (0:r0=1 /\ 1:r1=1)

@@ -1,0 +1,703 @@
+{
+  "meta": {
+    "generated": "2026-08-06T13:10:31+0100",
+    "platform": "Windows 10",
+    "java": "openjdk version \"21.0.10\" 2026-01-20 LTS",
+    "python": "3.11.9",
+    "repo_root": "C:\\Users\\Vidhu\\Projects\\weakest-visualiser\\wev-smt",
+    "manifest": "eval\\corpus-weakest-manifest-v2.csv",
+    "steps_run": [
+      "coverage",
+      "layer2",
+      "ladder",
+      "corpus_symbolic",
+      "examples",
+      "dat3m41",
+      "jmm20",
+      "published34",
+      "ra_atlas",
+      "rc11_direction",
+      "nthread",
+      "pwt",
+      "pso_canonical",
+      "qfbv_detector",
+      "detector_oracle_audit",
+      "detector_audit",
+      "scalability",
+      "hierarchy",
+      "herd7"
+    ],
+    "steps_carried_forward": [],
+    "wall_seconds": 2172.2931208610535
+  },
+  "_status": {
+    "coverage": {
+      "ok": true,
+      "seconds": 0.06894445419311523
+    },
+    "layer2": {
+      "ok": true,
+      "seconds": 2.87144136428833
+    },
+    "ladder": {
+      "ok": true,
+      "seconds": 0.7352848052978516
+    },
+    "corpus_symbolic": {
+      "ok": true,
+      "seconds": 123.31433200836182
+    },
+    "examples": {
+      "ok": true,
+      "seconds": 1.6277709007263184
+    },
+    "dat3m41": {
+      "ok": true,
+      "seconds": 0.0
+    },
+    "jmm20": {
+      "ok": true,
+      "seconds": 0.0
+    },
+    "published34": {
+      "ok": true,
+      "seconds": 0.0
+    },
+    "ra_atlas": {
+      "ok": true,
+      "seconds": 4.136904001235962
+    },
+    "rc11_direction": {
+      "ok": true,
+      "seconds": 1.4960484504699707
+    },
+    "nthread": {
+      "ok": true,
+      "seconds": 0.7374992370605469
+    },
+    "pwt": {
+      "ok": true,
+      "seconds": 1.4372689723968506
+    },
+    "pso_canonical": {
+      "ok": true,
+      "seconds": 2.0505573749542236
+    },
+    "qfbv_detector": {
+      "ok": true,
+      "seconds": 2.909235715866089
+    },
+    "detector_oracle_audit": {
+      "ok": true,
+      "seconds": 161.74953770637512
+    },
+    "detector_audit": {
+      "ok": true,
+      "seconds": 1.5356292724609375
+    },
+    "scalability": {
+      "ok": true,
+      "seconds": 1867.5537686347961
+    },
+    "hierarchy": {
+      "ok": true,
+      "seconds": 0.0671682357788086
+    },
+    "herd7": {
+      "ok": true,
+      "seconds": 0.001729726791381836
+    }
+  },
+  "coverage": {
+    "source": "artifact",
+    "corpus_files_total": 12324,
+    "supported_fragment": 2972,
+    "supported_fragment_v1": 2998,
+    "excluded_unmodeled_instructions": 26,
+    "coverage_percent": 24.1,
+    "coverage_percent_v1": 24.3,
+    "unsupported": 9352,
+    "skipped_unsupported_instructions": 7461,
+    "parse_errors": 1865,
+    "parts_sum": 12324,
+    "parts_partition_corpus": true,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "layer2": {
+    "source": "run",
+    "csv": "eval/layer2-audit.csv",
+    "wall_seconds": 2.9,
+    "layer2_sites": 0,
+    "layer2_tests": 0,
+    "layer2_expressions": 0,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "ladder": {
+    "source": "run",
+    "wall_seconds": 0.7,
+    "passed": 9,
+    "failed": 0,
+    "total": 9,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "corpus_symbolic": {
+    "source": "run",
+    "csv": "eval\\symbolic-rf-results.csv",
+    "wall_seconds": 123.3,
+    "tests": 2972,
+    "verdict_changes": 536,
+    "allowed_to_forbidden": 413,
+    "forbidden_to_allowed": 123,
+    "errors": 0,
+    "skipped": 0,
+    "symbolic_ms_median": 15,
+    "symbolic_ms_p95": 36,
+    "symbolic_ms_max": 122,
+    "symbolic_ms_mean": 19.1,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "examples": {
+    "source": "run",
+    "count": 41,
+    "verdicts": {
+      "paper/LB+ctrldata+ctrl-double": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "20"
+      },
+      "paper/LB+ctrldata+ctrl-single": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "13"
+      },
+      "paper/LB-fake-xor-cycle": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "17"
+      },
+      "paper/LB-fake-xor": {
+        "wired": "ALLOWED",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "paper/LB-real": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "12"
+      },
+      "paper/LBfd": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "12"
+      },
+      "paper/MP+dmb.sy+addr": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "13"
+      },
+      "jmm/TC01": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "13"
+      },
+      "jmm/TC02": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "jmm/TC03": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "jmm/TC04": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "jmm/TC05": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "jmm/TC06": {
+        "wired": "ALLOWED",
+        "symbolic": "FORBIDDEN",
+        "ms": "13"
+      },
+      "jmm/TC07": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "12"
+      },
+      "jmm/TC08": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "12"
+      },
+      "jmm/TC09": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "13"
+      },
+      "jmm/TC10": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "12"
+      },
+      "jmm/TC11": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "12"
+      },
+      "jmm/TC12": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "13"
+      },
+      "jmm/TC13": {
+        "wired": "FORBIDDEN",
+        "symbolic": "ALLOWED",
+        "ms": "12"
+      },
+      "jmm/TC14": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "jmm/TC15": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "16"
+      },
+      "jmm/TC16": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "17"
+      },
+      "jmm/TC17": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "jmm/TC18": {
+        "wired": "ALLOWED",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "jmm/TC19": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "12"
+      },
+      "jmm/TC20": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "weakestmo/CoRR": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "weakestmo/CoRW": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "10"
+      },
+      "weakestmo/CoWR": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "weakestmo/LB+ctrl": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "16"
+      },
+      "weakestmo/LB": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "13"
+      },
+      "weakestmo/LBd": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "11"
+      },
+      "weakestmo/MP": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "14"
+      },
+      "weakestmo/OOTA": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "12"
+      },
+      "leaky-semicolon/LB": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "12"
+      },
+      "leaky-semicolon/LBcd": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "12"
+      },
+      "leaky-semicolon/LBd": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "10"
+      },
+      "leaky-semicolon/LBfc": {
+        "wired": "FORBIDDEN",
+        "symbolic": "FORBIDDEN",
+        "ms": "12"
+      },
+      "leaky-semicolon/LBfd": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "11"
+      },
+      "leaky-semicolon/LBxor": {
+        "wired": "ALLOWED",
+        "symbolic": "ALLOWED",
+        "ms": "11"
+      }
+    },
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "dat3m41": {
+    "source": "run",
+    "total": 41,
+    "wired_agreement": 31,
+    "symbolic_agreement": 35,
+    "divergences": 6,
+    "flips": [
+      {
+        "test": "paper/LB-fake-xor",
+        "wired": "ALLOWED",
+        "symbolic": "FORBIDDEN",
+        "reference": "FORBIDDEN",
+        "toward_reference": true
+      },
+      {
+        "test": "jmm/TC06",
+        "wired": "ALLOWED",
+        "symbolic": "FORBIDDEN",
+        "reference": "FORBIDDEN",
+        "toward_reference": true
+      },
+      {
+        "test": "jmm/TC13",
+        "wired": "FORBIDDEN",
+        "symbolic": "ALLOWED",
+        "reference": "ALLOWED",
+        "toward_reference": true
+      },
+      {
+        "test": "jmm/TC18",
+        "wired": "ALLOWED",
+        "symbolic": "FORBIDDEN",
+        "reference": "FORBIDDEN",
+        "toward_reference": true
+      }
+    ],
+    "per_suite": {
+      "paper": {
+        "total": 7,
+        "wired": 3,
+        "symbolic": 4
+      },
+      "jmm": {
+        "total": 20,
+        "wired": 16,
+        "symbolic": 19
+      },
+      "weakestmo": {
+        "total": 8,
+        "wired": 8,
+        "symbolic": 8
+      },
+      "leaky-semicolon": {
+        "total": 6,
+        "wired": 4,
+        "symbolic": 4
+      }
+    },
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "jmm20": {
+    "source": "run",
+    "total": 20,
+    "wired_agreement": 17,
+    "symbolic_agreement": 18,
+    "divergences": [
+      {
+        "test": "TC04",
+        "jmm": "ALLOWED",
+        "wev_symbolic": "FORBIDDEN",
+        "cause": "control-dependency"
+      },
+      {
+        "test": "TC13",
+        "jmm": "FORBIDDEN",
+        "wev_symbolic": "ALLOWED",
+        "cause": "-"
+      }
+    ],
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "published34": {
+    "source": "run",
+    "total": 34,
+    "wired_agreement": 30,
+    "symbolic_agreement": 31,
+    "per_source": {
+      "weakestmo": {
+        "total": 8,
+        "wired": 8,
+        "symbolic": 8
+      },
+      "leaky-semicolon": {
+        "total": 6,
+        "wired": 5,
+        "symbolic": 5
+      },
+      "jmm": {
+        "total": 20,
+        "wired": 17,
+        "symbolic": 18
+      }
+    },
+    "divergences": [
+      {
+        "test": "leaky-semicolon/LBfc",
+        "source": "leaky-semicolon",
+        "expected": "ALLOWED",
+        "got": "FORBIDDEN"
+      },
+      {
+        "test": "jmm/TC04",
+        "source": "jmm",
+        "expected": "ALLOWED",
+        "got": "FORBIDDEN"
+      },
+      {
+        "test": "jmm/TC13",
+        "source": "jmm",
+        "expected": "FORBIDDEN",
+        "got": "ALLOWED"
+      }
+    ],
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "ra_atlas": {
+    "source": "run",
+    "csv": "eval/ra-formal-atlas.csv",
+    "wall_seconds": 4.1,
+    "tests": 40,
+    "ra_formal_matches_ra": 40,
+    "ra_formal_divergences": 0,
+    "subchain_violations": 0,
+    "subchain_violation_tests": [],
+    "ra_weakest_witnesses": 3,
+    "ra_weakest_witness_tests": [
+      "LBdep-real",
+      "LBdep-addr",
+      "3.LBdep-real"
+    ],
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "rc11_direction": {
+    "source": "run",
+    "csv": "eval/rc11-direction-check.csv",
+    "wall_seconds": 1.5,
+    "tests": 27,
+    "agree": 21,
+    "rc11_forbids_weakest_allows": 6,
+    "rc11_forbids_weakest_allows_tests": [
+      "LB-fake-xor-cycle",
+      "LBfd",
+      "TC01",
+      "TC06",
+      "TC12",
+      "TC18"
+    ],
+    "weakest_forbids_rc11_allows": 0,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "nthread": {
+    "source": "run",
+    "csv": "eval/nthread-grounded-admission.csv",
+    "wall_seconds": 0.7,
+    "n_min": 2,
+    "n_max": 8,
+    "rows": 7,
+    "allowed": 7,
+    "all_allowed": true,
+    "max_events": 24,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "pwt": {
+    "source": "run",
+    "csv": "eval/pwt-equivalence-sweep.csv",
+    "wall_seconds": 1.4,
+    "pairs": 79,
+    "agree": 79,
+    "disagree": 0,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "pso_canonical": {
+    "source": "run",
+    "csv": "eval/pso-canonical-comparison.csv",
+    "wall_seconds": 2.1,
+    "tests": 40,
+    "divergences": 2,
+    "divergence_tests": [
+      "CO-MP",
+      "MP-relacq"
+    ],
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "qfbv_detector": {
+    "source": "run",
+    "csv": "eval/qfbv-detector-results.csv",
+    "wall_seconds": 2.9,
+    "tests": 2972,
+    "changed": 0,
+    "changed_tests": [],
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "detector_oracle_audit": {
+    "source": "run",
+    "csv": "eval/detector-oracle-audit.csv",
+    "wall_seconds": 161.7,
+    "enumerated_checked": 12008,
+    "corpus_pairs_checked": 98,
+    "total_audited": 12106,
+    "outside_grammar": -1,
+    "strict_equality_mismatches": 990,
+    "conservative": 990,
+    "unsound": 0,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "detector_audit": {
+    "source": "run",
+    "csv": "eval/detector-quality-report.csv",
+    "wall_seconds": 1.5,
+    "edges": 318,
+    "fake_edges": 301,
+    "semantic_edges": 17,
+    "verdict_relevant_edges": 5,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "scalability": {
+    "source": "run",
+    "csv": "eval/scalability-consistency.csv",
+    "families": [
+      "IRIWFan",
+      "LBChain",
+      "LBFakeChain",
+      "SBNThread"
+    ],
+    "n_values": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      10,
+      12,
+      16
+    ],
+    "n_max": 16,
+    "max_events": 64,
+    "at_n_max": {
+      "LBChain": {
+        "events": 48,
+        "verdict": "FORBIDDEN",
+        "SC": 38,
+        "TSO": 38,
+        "WEAKEST": 36,
+        "PSO_RA_max": 3632
+      },
+      "SBNThread": {
+        "events": 48,
+        "verdict": "ALLOWED",
+        "SC": 44,
+        "TSO": 53,
+        "WEAKEST": 90,
+        "PSO_RA_max": 3096
+      },
+      "IRIWFan": {
+        "events": 64,
+        "verdict": "ALLOWED",
+        "SC": 46,
+        "TSO": 48,
+        "WEAKEST": 56,
+        "PSO_RA_max": 6788
+      },
+      "LBFakeChain": {
+        "events": 48,
+        "verdict": "ALLOWED",
+        "SC": 39,
+        "TSO": 50,
+        "WEAKEST": 69,
+        "PSO_RA_max": 4944
+      }
+    },
+    "weakest_ms_max": 140,
+    "lb_real_vs_fake_ratio": 0.52,
+    "pso_ra_ms_max": 6788,
+    "wall_seconds": 1867.5,
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "hierarchy": {
+    "source": "artifact",
+    "note": "derived from corpus-validation-{dat3m,herd7}.csv \u2229 manifest v2",
+    "tests_with_all_models": 2972,
+    "edges_checked": [
+      "SC>=TSO",
+      "SC>=PSO",
+      "SC>=RA",
+      "SC>=WEAKEST"
+    ],
+    "violations": 0,
+    "violation_witnesses": [],
+    "intermediate_violations": 0,
+    "intermediate_witnesses": [],
+    "weakest_only_allowed": 6,
+    "weakest_only_allowed_tests": [
+      "Dat3M/litmus/LKMM/luc/RelAcq/C-3.LB+poacquirerelease+poacquirerelease+pooncerelease.litmus",
+      "Dat3M/litmus/LKMM/luc/RelAcq/C-ISA2+pooncerelease+poacquirerelease+poacquireacquire.litmus",
+      "Dat3M/litmus/LKMM/luc/RelAcq/C-MP+pooncerelease+poacquireacquire.litmus",
+      "Dat3M/litmus/LKMM/luc/RelAcq/C-WRC+poacquirerelease+poacquireacquire+Release.litmus",
+      "Dat3M/litmus/LKMM/luc/RelAcq/C-WRC+pooncerelease+poacquireacquire+Release.litmus",
+      "Dat3M/litmus/LKMM/manual/extra/C-3.lb+once-rel+acq-rel+acq-once.litmus"
+    ],
+    "ran_at": "2026-08-06T13:10:31+0100"
+  },
+  "herd7": {
+    "source": "artifact",
+    "note": "derived from herd7-results.csv + herd7-wev-verdicts.csv",
+    "ARM_SC": {
+      "agree": 138,
+      "compared": 360,
+      "percent": 38.3
+    },
+    "non-ARM_SC": {
+      "agree": 106,
+      "compared": 123,
+      "percent": 86.2
+    },
+    "non-ARM_TSO": {
+      "agree": 34,
+      "compared": 46,
+      "percent": 73.9
+    },
+    "ran_at": "2026-08-06T13:10:31+0100"
+  }
+}
