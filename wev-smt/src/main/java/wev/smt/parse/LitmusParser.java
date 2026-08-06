@@ -573,7 +573,10 @@ public final class LitmusParser {
                 List<RawInstr> stmts = new ArrayList<>();
                 for (String st : inner.split(";")) {
                     String s = st.strip();
-                    if (!s.isEmpty()) stmts.add(new RawInstr(s, from + 1));
+                    if (s.isEmpty()) continue;
+                    for (String piece : splitGuardedStatement(s)) {
+                        stmts.add(new RawInstr(piece, from + 1));
+                    }
                 }
                 threads.add(stmts);
                 searchFrom = close + 1;
@@ -581,6 +584,62 @@ public final class LitmusParser {
             return threads;
         }
 
+        private static final Pattern ELSE_PREFIX = Pattern.compile("(?i)^else\\b\\s*");
+        private static final Pattern IF_PREFIX = Pattern.compile("(?i)^if\\s*\\(");
+
+        /**
+         * Split a guarded statement {@code "if (c) STMT"} into the guard {@code "if (c)"}
+         * and the guarded statement {@code "STMT"}, and strip a leading {@code else}.
+         *
+         * <p>Without this, {@link Lexer#lexC} matches {@code C_WRITE_ONCE} with
+         * {@code .find()} (a substring search) before it ever reaches the
+         * {@code if|while|for} test, so {@code "if (r0==1) WRITE_ONCE(*x,1)"} lexes as a
+         * bare store and <em>the guard is silently discarded</em> — no {@code BRANCH}
+         * instruction, hence no control edge. Splitting here restores parity with the
+         * {@code "if (c) ; STMT"} idiom, which only worked because the empty arm left
+         * {@code "if (c)"} as a statement of its own.
+         *
+         * <p>This is deliberately a lexical repair at the statement boundary: it changes
+         * no lexer rule, no dependency policy, and no {@code isSemantic} flag. Control
+         * edges remain unconditionally semantic, exactly as before.
+         *
+         * <p><b>What this does NOT fix.</b> There is still no branch structure: the arms
+         * of an {@code if/else} become straight-line statements, so a two-armed branch
+         * yields TWO write events where the program performs one. Representing that needs
+         * real branch structure in the event model and is out of scope here.
+         */
+        private static List<String> splitGuardedStatement(String s) {
+            List<String> out = new ArrayList<>();
+            String rest = s;
+            Matcher e = ELSE_PREFIX.matcher(rest);
+            if (e.find()) rest = rest.substring(e.end()).strip();
+            int g = guardEnd(rest);
+            if (g > 0) {
+                out.add(rest.substring(0, g).strip());
+                String body = rest.substring(g).strip();
+                if (!body.isEmpty()) out.add(body);
+            } else if (!rest.isEmpty()) {
+                out.add(rest);
+            }
+            return out;
+        }
+
+        /**
+         * Index just past the closing parenthesis of a leading {@code if (...)}, or -1 if
+         * {@code s} does not start with one. Parenthesis matching is balanced, so guards
+         * such as {@code if ((r0 & 1) == 1)} are handled.
+         */
+        private static int guardEnd(String s) {
+            Matcher m = IF_PREFIX.matcher(s);
+            if (!m.find()) return -1;
+            int depth = 0;
+            for (int i = m.end() - 1; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c == '(') depth++;
+                else if (c == ')' && --depth == 0) return i + 1;
+            }
+            return -1;
+        }
 
         private String joinLines(int from, int to) {
             StringBuilder sb = new StringBuilder();
