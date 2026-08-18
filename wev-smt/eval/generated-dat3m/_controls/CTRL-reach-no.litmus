@@ -1,0 +1,10 @@
+C CTRL-reach-no
+
+{ }
+
+P0(int *x0)
+{
+    WRITE_ONCE(*x0, 1);
+}
+
+exists (x0=2)

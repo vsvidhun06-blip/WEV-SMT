@@ -1,0 +1,78 @@
+{
+ "equiv_w1": {
+  "signatures": 2,
+  "classes": 2,
+  "bijection": true
+ },
+ "equiv_w2": {
+  "signatures": 12,
+  "classes": 12,
+  "bijection": true
+ },
+ "grammar": [
+  {
+   "w": 1,
+   "depth": 2,
+   "funcs": 4,
+   "classes": 2,
+   "capacity": 8,
+   "exceeds": false
+  },
+  {
+   "w": 1,
+   "depth": 3,
+   "funcs": 4,
+   "classes": 2,
+   "capacity": 8,
+   "exceeds": false
+  },
+  {
+   "w": 2,
+   "depth": 2,
+   "funcs": 40,
+   "classes": 10,
+   "capacity": 8,
+   "exceeds": true
+  },
+  {
+   "w": 2,
+   "depth": 3,
+   "funcs": 64,
+   "classes": 12,
+   "capacity": 8,
+   "exceeds": true
+  },
+  {
+   "w": 3,
+   "depth": 2,
+   "funcs": 438,
+   "classes": 71,
+   "capacity": 8,
+   "exceeds": true
+  },
+  {
+   "w": 3,
+   "depth": 3,
+   "funcs": 2562,
+   "classes": 171,
+   "capacity": 8,
+   "exceeds": true
+  },
+  {
+   "w": 4,
+   "depth": 2,
+   "funcs": 2163,
+   "classes": 296,
+   "capacity": 8,
+   "exceeds": true
+  },
+  {
+   "w": 4,
+   "depth": 3,
+   "funcs": 32498,
+   "classes": 2092,
+   "capacity": 8,
+   "exceeds": true
+  }
+ ]
+}

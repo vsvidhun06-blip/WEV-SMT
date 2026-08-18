@@ -1,0 +1,81 @@
+Environment and provenance for the Dat3M/LKMM hard-expression baseline
+==============================================================================
+
+Generated 2026-08-17T14:33:08+0100 by eval/dat3m_lkmm_hardbench.py
+
+TOOL AND MODEL
+------------------------------------------------------------------------------
+Dat3M version:           4.4.1
+Dat3M commit:            d8de5e8ef6aa4a697ff2bbe88fa8416dfcd4ac7c
+Dat3M home:              eval/corpus/Dat3M
+model:                   cat/linux-kernel.cat
+target:                  lkmm
+property:                program_spec
+Java:                    openjdk version "21.0.10" 2026-01-20 LTS
+platform:                win32
+parallelism:             12 worker processes
+per-instance timeout:    300 s per instance (never reached)
+total runtime:           593.1 s wall clock for all 3,656 invocations
+
+
+INPUTS
+------------------------------------------------------------------------------
+instance source:         eval/generated-hard-pairs.csv
+  sha256:                678e401c2045634f70fcb9506b161b67de1a980895c841e873f6ee6c64ffc41f
+  rows consumed:         3656
+generator/driver:        eval/dat3m_lkmm_hardbench.py
+  sha256:                213bdbb2f76064018508178656486665f49b2ccc1c1650266f8788a6f0568ee1
+rendered inputs:         eval/generated-dat3m/*.litmus
+
+
+COMMAND LINE, PER INSTANCE
+------------------------------------------------------------------------------
+DAT3M_HOME=eval/corpus/Dat3M \
+java -jar eval/corpus/Dat3M/dartagnan/target/dartagnan.jar \
+     eval/corpus/Dat3M/cat/linux-kernel.cat \
+     --target=lkmm \
+     eval/generated-dat3m/<INSTANCE_ID>.litmus \
+     --property=program_spec
+
+<INSTANCE_ID> is HARD-n{n}-{hex(java String.hashCode of the expression)},
+the identifier HardExprBenchRun gives the instance. Rows therefore join to
+eval/generated-hard-pairs.csv on (expr, threads).
+
+linux-kernel.cat with --target=lkmm is used because LKMM is the deployed
+model whose ordering is syntactic-dependency based; IMM and RC11 reject
+READ_ONCE/WRITE_ONCE programs outright. This is the same model and the same
+invocation shape as the 41-test cross-check recorded in
+eval/dat3m-command-lines.txt.
+
+
+REPRODUCE
+------------------------------------------------------------------------------
+python eval/dat3m_lkmm_hardbench.py
+
+Renders the inputs, runs the five controls, runs all 3,656 instances and
+rewrites every output below. It aborts rather than write partial evidence
+if a control mismatches or if any expected count fails to reproduce.
+
+
+OUTPUT MANIFEST (SHA-256, computed at generation time)
+------------------------------------------------------------------------------
+Recomputing these digests detects any post-hoc edit of the result files.
+
+eval/dat3m-lkmm-hardbench.csv
+  1350 scored instances, one row each
+  f78bd8bdae119aa8583b38a96b4dde62e0ffda44a12c507c2eafa12128f232e3
+
+eval/dat3m-lkmm-grounded-rings.csv
+  390 grounded rings, one row each
+  5eab2e9e4d031534cc92f437d0c811593b36d30b308c2aea07534744112f0f4d
+
+eval/dat3m-lkmm-excluded.csv
+  2306 excluded instances with the parser rejection text
+  ac334ecc2998788f48cbfb273fdba532a775a7eb3bad1cefff52e280e0f12783
+
+eval/dat3m-lkmm-controls.txt
+  the five calibration controls, sources and results
+  392196eac935985c177106809f7e839ccb5fcd0eca2c99ee0695bb66d89d2505
+
+
+Timestamps above are provenance only and carry no scientific weight.

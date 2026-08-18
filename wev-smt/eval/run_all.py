@@ -1423,7 +1423,10 @@ def main() -> int:
             "platform": f"{platform.system()} {platform.release()}",
             "java": java_version(),
             "python": sys.version.split()[0],
-            "repo_root": str(ROOT),
+            # Placeholder, not the real path: the absolute repository root is
+            # machine-specific and would leak a local username into the shipped
+            # artifact. Nothing reads this field; it is provenance only.
+            "repo_root": "<ARTIFACT_ROOT>",
             "manifest": str(MANIFEST_V2.relative_to(ROOT)),
             "steps_run": [],
             "steps_carried_forward": sorted(carried),

@@ -1,0 +1,197 @@
+The five calibration controls for the Dat3M/LKMM hard-expression baseline
+==============================================================================
+
+Generated 2026-08-17T14:33:08+0100 by eval/dat3m_lkmm_hardbench.py
+
+WHY THIS FILE EXISTS
+------------------------------------------------------------------------------
+Dartagnan reports PASS or FAIL, and the mapping from those tokens to
+ALLOWED / FORBIDDEN is not self-evident from its output. On FAIL it prints
+
+    Reason: Program specification violation found
+
+which reads as though the outcome had been observed. It has not. Dartagnan
+negates the litmus exists clause into a safety assertion, so "violation
+found" means the assertion could not be upheld, i.e. the exists clause is
+UNREACHABLE. Reading that token the natural way inverts every verdict in
+the experiment, so the mapping is established empirically below rather
+than taken from the wording.
+
+These five controls run before any instance is scored. If any one of them
+disagrees with its expected verdict the run aborts and writes nothing.
+
+CONCLUSION ESTABLISHED BY CONTROLS 1 AND 2 (model-independent)
+------------------------------------------------------------------------------
+    Dat3M PASS = exists clause reachable   = ALLOWED
+    Dat3M FAIL = exists clause unreachable = FORBIDDEN
+
+Controls 3-5 then confirm that reading on the benchmark ring shape itself.
+
+RESULTS
+------------------------------------------------------------------------------
+control                expected    observed    dat3m   outcome
+------------------------------------------------------------------------------
+CTRL-reach-yes         ALLOWED     ALLOWED     PASS    OK
+CTRL-reach-no          FORBIDDEN   FORBIDDEN   FAIL    OK
+CTRL-LB-nodep-n2       ALLOWED     ALLOWED     PASS    OK
+CTRL-LB-nodep-n3       ALLOWED     ALLOWED     PASS    OK
+CTRL-LB-realdep-n2     FORBIDDEN   FORBIDDEN   FAIL    OK
+------------------------------------------------------------------------------
+
+COMMAND (identical for every control and every scored instance)
+------------------------------------------------------------------------------
+DAT3M_HOME=eval/corpus/Dat3M \
+java -jar eval/corpus/Dat3M/dartagnan/target/dartagnan.jar \
+     eval/corpus/Dat3M/cat/linux-kernel.cat \
+     --target=lkmm <CONTROL>.litmus --property=program_spec
+
+
+EACH CONTROL: RATIONALE, SOURCE, OBSERVED RESULT
+==============================================================================
+
+1. CTRL-reach-yes
+------------------------------------------------------------------------------
+Rationale.
+  Model-independent reachability. One thread writes x0=1 and the condition
+  asks for x0=1. Reachable under every memory model, so whatever token Dat3M
+  prints here is the token for ALLOWED.
+
+Expected: ALLOWED     Dat3M printed: PASS     Interpreted as: ALLOWED     OK
+
+Litmus source:
+  | C CTRL-reach-yes
+  | 
+  | { }
+  | 
+  | P0(int *x0)
+  | {
+  |     WRITE_ONCE(*x0, 1);
+  | }
+  | 
+  | exists (x0=1)
+
+
+2. CTRL-reach-no
+------------------------------------------------------------------------------
+Rationale.
+  Model-independent unreachability. The same single write, but the condition
+  asks for x0=2, a value no instruction ever stores. Unreachable under every
+  memory model, so whatever token Dat3M prints here is the token for
+  FORBIDDEN. This is the control that overrides the misleading "specification
+  violation" wording.
+
+Expected: FORBIDDEN     Dat3M printed: FAIL     Interpreted as: FORBIDDEN     OK
+
+Litmus source:
+  | C CTRL-reach-no
+  | 
+  | { }
+  | 
+  | P0(int *x0)
+  | {
+  |     WRITE_ONCE(*x0, 1);
+  | }
+  | 
+  | exists (x0=2)
+
+
+3. CTRL-LB-nodep-n2
+------------------------------------------------------------------------------
+Rationale.
+  Dependency-free load-buffering ring at n=2, the smaller of the two ring
+  sizes used by the benchmark. Each thread stores a literal, so no dependency
+  of any kind carries the cycle and LKMM orders nothing: the outcome is
+  allowed. Confirms the reading on the actual ring shape, not just on a
+  one-line program.
+
+Expected: ALLOWED     Dat3M printed: PASS     Interpreted as: ALLOWED     OK
+
+Litmus source:
+  | C CTRL-LB-nodep-n2
+  | 
+  | { }
+  | 
+  | P0(int *x0, int *x1)
+  | {
+  |     int r0 = READ_ONCE(*x0);
+  |     WRITE_ONCE(*x1, 1);
+  | }
+  | 
+  | P1(int *x0, int *x1)
+  | {
+  |     int r1 = READ_ONCE(*x1);
+  |     WRITE_ONCE(*x0, 1);
+  | }
+  | 
+  | exists (0:r0=1 /\ 1:r1=1)
+
+
+4. CTRL-LB-nodep-n3
+------------------------------------------------------------------------------
+Rationale.
+  The same dependency-free ring at n=3, the other ring size used by the
+  benchmark. Confirms the reading does not depend on ring size.
+
+Expected: ALLOWED     Dat3M printed: PASS     Interpreted as: ALLOWED     OK
+
+Litmus source:
+  | C CTRL-LB-nodep-n3
+  | 
+  | { }
+  | 
+  | P0(int *x0, int *x1, int *x2)
+  | {
+  |     int r0 = READ_ONCE(*x0);
+  |     WRITE_ONCE(*x1, 1);
+  | }
+  | 
+  | P1(int *x0, int *x1, int *x2)
+  | {
+  |     int r1 = READ_ONCE(*x1);
+  |     WRITE_ONCE(*x2, 1);
+  | }
+  | 
+  | P2(int *x0, int *x1, int *x2)
+  | {
+  |     int r2 = READ_ONCE(*x2);
+  |     WRITE_ONCE(*x0, 1);
+  | }
+  | 
+  | exists (0:r0=1 /\ 1:r1=1 /\ 2:r2=1)
+
+
+5. CTRL-LB-realdep-n2
+------------------------------------------------------------------------------
+Rationale.
+  The same ring at n=2, but each store now forwards the value just loaded, so
+  a real syntactic data dependency carries the cycle. LKMM orders by syntactic
+  dependency by design, so the outcome is forbidden. Together with
+  CTRL-LB-nodep-n2 this shows Dat3M is responding to dependency content on
+  exactly this shape, which is what makes the 1,350-instance comparison
+  meaningful.
+
+Expected: FORBIDDEN     Dat3M printed: FAIL     Interpreted as: FORBIDDEN     OK
+
+Litmus source:
+  | C CTRL-LB-realdep-n2
+  | 
+  | { }
+  | 
+  | P0(int *x0, int *x1)
+  | {
+  |     int r0 = READ_ONCE(*x0);
+  |     WRITE_ONCE(*x1, r0);
+  | }
+  | 
+  | P1(int *x0, int *x1)
+  | {
+  |     int r1 = READ_ONCE(*x1);
+  |     WRITE_ONCE(*x0, r1);
+  | }
+  | 
+  | exists (0:r0=1 /\ 1:r1=1)
+
+
+The litmus source above is regenerated verbatim from CONTROLS in
+eval/dat3m_lkmm_hardbench.py on every run; the files themselves are
+written to eval/generated-dat3m/_controls/.

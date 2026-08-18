@@ -1,0 +1,290 @@
+[
+ {
+  "w": 1,
+  "depth": 2,
+  "m": 1,
+  "capacity": 2,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 2,
+  "m": 2,
+  "capacity": 4,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 2,
+  "m": 3,
+  "capacity": 8,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 2,
+  "m": 4,
+  "capacity": 16,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 2,
+  "m": 8,
+  "capacity": 256,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 2,
+  "m": 12,
+  "capacity": 4096,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 3,
+  "m": 1,
+  "capacity": 2,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 3,
+  "m": 2,
+  "capacity": 4,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 3,
+  "m": 3,
+  "capacity": 8,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 3,
+  "m": 4,
+  "capacity": 16,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 3,
+  "m": 8,
+  "capacity": 256,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 1,
+  "depth": 3,
+  "m": 12,
+  "capacity": 4096,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 2,
+  "depth": 2,
+  "m": 1,
+  "capacity": 2,
+  "synthesized": false,
+  "reason": "pigeonhole: 10 signatures > capacity 2"
+ },
+ {
+  "w": 2,
+  "depth": 2,
+  "m": 2,
+  "capacity": 4,
+  "synthesized": false,
+  "reason": "pigeonhole: 10 signatures > capacity 4"
+ },
+ {
+  "w": 2,
+  "depth": 2,
+  "m": 3,
+  "capacity": 8,
+  "synthesized": false,
+  "reason": "pigeonhole: 10 signatures > capacity 8"
+ },
+ {
+  "w": 2,
+  "depth": 2,
+  "m": 4,
+  "capacity": 16,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 2,
+  "depth": 2,
+  "m": 8,
+  "capacity": 256,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 2,
+  "depth": 2,
+  "m": 12,
+  "capacity": 4096,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 2,
+  "depth": 3,
+  "m": 1,
+  "capacity": 2,
+  "synthesized": false,
+  "reason": "pigeonhole: 12 signatures > capacity 2"
+ },
+ {
+  "w": 2,
+  "depth": 3,
+  "m": 2,
+  "capacity": 4,
+  "synthesized": false,
+  "reason": "pigeonhole: 12 signatures > capacity 4"
+ },
+ {
+  "w": 2,
+  "depth": 3,
+  "m": 3,
+  "capacity": 8,
+  "synthesized": false,
+  "reason": "pigeonhole: 12 signatures > capacity 8"
+ },
+ {
+  "w": 2,
+  "depth": 3,
+  "m": 4,
+  "capacity": 16,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 2,
+  "depth": 3,
+  "m": 8,
+  "capacity": 256,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 2,
+  "depth": 3,
+  "m": 12,
+  "capacity": 4096,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 3,
+  "depth": 2,
+  "m": 1,
+  "capacity": 2,
+  "synthesized": false,
+  "reason": "pigeonhole: 71 signatures > capacity 2"
+ },
+ {
+  "w": 3,
+  "depth": 2,
+  "m": 2,
+  "capacity": 4,
+  "synthesized": false,
+  "reason": "pigeonhole: 71 signatures > capacity 4"
+ },
+ {
+  "w": 3,
+  "depth": 2,
+  "m": 3,
+  "capacity": 8,
+  "synthesized": false,
+  "reason": "pigeonhole: 71 signatures > capacity 8"
+ },
+ {
+  "w": 3,
+  "depth": 2,
+  "m": 4,
+  "capacity": 16,
+  "synthesized": false,
+  "reason": "pigeonhole: 71 signatures > capacity 16"
+ },
+ {
+  "w": 3,
+  "depth": 2,
+  "m": 8,
+  "capacity": 256,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 3,
+  "depth": 2,
+  "m": 12,
+  "capacity": 4096,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ },
+ {
+  "w": 3,
+  "depth": 3,
+  "m": 1,
+  "capacity": 2,
+  "synthesized": false,
+  "reason": "pigeonhole: 171 signatures > capacity 2"
+ },
+ {
+  "w": 3,
+  "depth": 3,
+  "m": 2,
+  "capacity": 4,
+  "synthesized": false,
+  "reason": "pigeonhole: 171 signatures > capacity 4"
+ },
+ {
+  "w": 3,
+  "depth": 3,
+  "m": 3,
+  "capacity": 8,
+  "synthesized": false,
+  "reason": "pigeonhole: 171 signatures > capacity 8"
+ },
+ {
+  "w": 3,
+  "depth": 3,
+  "m": 4,
+  "capacity": 16,
+  "synthesized": false,
+  "reason": "pigeonhole: 171 signatures > capacity 16"
+ },
+ {
+  "w": 3,
+  "depth": 3,
+  "m": 8,
+  "capacity": 256,
+  "synthesized": false,
+  "reason": "g-slot needs 305 states > capacity 256 (e-slot fits, g-slot does not)"
+ },
+ {
+  "w": 3,
+  "depth": 3,
+  "m": 12,
+  "capacity": 4096,
+  "synthesized": true,
+  "reason": "constructed beta and f"
+ }
+]

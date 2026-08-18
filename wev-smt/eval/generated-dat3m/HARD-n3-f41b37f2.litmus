@@ -1,0 +1,23 @@
+C HARD-n3-f41b37f2
+
+{ }
+
+P0(int *x0, int *x1, int *x2)
+{
+    int r0 = READ_ONCE(*x0);
+    WRITE_ONCE(*x1, 1 & 0 * r0 ^ 1);
+}
+
+P1(int *x0, int *x1, int *x2)
+{
+    int r1 = READ_ONCE(*x1);
+    WRITE_ONCE(*x2, 1 & 0 * r1 ^ 1);
+}
+
+P2(int *x0, int *x1, int *x2)
+{
+    int r2 = READ_ONCE(*x2);
+    WRITE_ONCE(*x0, 1 & 0 * r2 ^ 1);
+}
+
+exists (0:r0=1 /\ 1:r1=1 /\ 2:r2=1)

@@ -1,0 +1,58 @@
+[
+ {
+  "w": 1,
+  "depth": 2,
+  "signatures": 2,
+  "capacity": 2,
+  "claimD_holds": false
+ },
+ {
+  "w": 1,
+  "depth": 3,
+  "signatures": 2,
+  "capacity": 2,
+  "claimD_holds": false
+ },
+ {
+  "w": 2,
+  "depth": 2,
+  "signatures": 10,
+  "capacity": 2,
+  "claimD_holds": true
+ },
+ {
+  "w": 2,
+  "depth": 3,
+  "signatures": 12,
+  "capacity": 2,
+  "claimD_holds": true
+ },
+ {
+  "w": 3,
+  "depth": 2,
+  "signatures": 71,
+  "capacity": 2,
+  "claimD_holds": true
+ },
+ {
+  "w": 3,
+  "depth": 3,
+  "signatures": 171,
+  "capacity": 2,
+  "claimD_holds": true
+ },
+ {
+  "w": 4,
+  "depth": 2,
+  "signatures": 276,
+  "capacity": 2,
+  "claimD_holds": true
+ },
+ {
+  "w": 4,
+  "depth": 3,
+  "signatures": 2082,
+  "capacity": 2,
+  "claimD_holds": true
+ }
+]

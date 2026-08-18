@@ -44,3 +44,5 @@ session WEV_SMT_PwT in "pwt" = WEV_SMT +
     PwT_R4b
     PwT_Program
     PwT_Control
+    PwT_Granularity
+    PwT_ReadRestricted

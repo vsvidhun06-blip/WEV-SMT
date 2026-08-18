@@ -25,4 +25,4 @@ WEAKEST  \ TSO      : LB(4), S(4), MP(5), WRC(6), IRIW(8)  [35 T/O]
 WEAKEST  \ PSO      : LB(4), WRC(6), IRIW(8)  [37 T/O]
 WEAKEST  \ RA       : (no separating test)  [40 T/O]
 
-Total wall-clock: 491.8 s (budget 600 s). CSVs in C:\Users\Vidhu\Projects\weakest-visualiser\wev-smt\.
+Total wall-clock: 491.8 s (budget 600 s). CSVs in <ARTIFACT_ROOT>\.

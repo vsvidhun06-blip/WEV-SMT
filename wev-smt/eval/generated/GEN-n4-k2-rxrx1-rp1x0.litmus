@@ -1,0 +1,6 @@
+C GEN-n4-k2-rxrx1-rp1x0
+{ }
+ P0 | P1 | P2 | P3 ;
+ r0 = READ_ONCE(*x0) | r1 = READ_ONCE(*x1) | r2 = READ_ONCE(*x2) | r3 = READ_ONCE(*x3) ;
+ WRITE_ONCE(*x1, r0 ^ r0 ^ 1) | WRITE_ONCE(*x2, r1 ^ r1 ^ 1) | WRITE_ONCE(*x3, r2 + 1 ^ 0) | WRITE_ONCE(*x0, r3 + 1 ^ 0) ;
+exists (0:r0=1 /\ 1:r1=1 /\ 2:r2=1 /\ 3:r3=1)

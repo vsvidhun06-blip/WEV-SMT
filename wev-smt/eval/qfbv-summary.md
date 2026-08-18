@@ -14,8 +14,8 @@ The oracle subsumes the old linear-cancellation heuristic (it also proves non-li
 
 | | |
 |---|---|
-| Manifest | `C:\Users\Vidhu\Projects\weakest-visualiser\wev-smt\eval\corpus-weakest-manifest-v2.csv` |
-| Corpus root | `C:\Users\Vidhu\Projects\weakest-visualiser\wev-smt\eval\corpus` |
+| Manifest | `<ARTIFACT_ROOT>\eval\corpus-weakest-manifest-v2.csv` |
+| Corpus root | `<ARTIFACT_ROOT>\eval\corpus` |
 | Files parsed (rows) | 2972 |
 | Files skipped / parse-error | 0 / 0 |
 
