@@ -69,7 +69,12 @@ cd wev-smt
 mvn test
 ```
 
-The visualiser itself runs with `mvn javafx:run` from the repository root.
+The visualiser itself runs with `mvn javafx:run` from the repository root. The JavaFX Maven plugin needs network access the first time it runs. Alternatively, run the shaded jar that `mvn package` builds:
+
+```
+mvn package -DskipTests
+java -jar target/weakest-visualiser.jar
+```
 
 ### Getting the base artifact
 
@@ -111,6 +116,22 @@ isabelle build -d . WEV_SMT WEV_SMT_PwT WEV_SMT_Rev WEV_SMT_TL
 
 ## Captured runs
 
+### Execution visualiser
+
+Window captures of the JavaFX visualiser (`src/`), run from `target/weakest-visualiser.jar` on 2026-11-14 on Windows 11 at 1920x1080. They are cropped but otherwise unedited. The visualiser has its own execution enumerator and consistency rules. It does not call WEV-SMT or Z3, so nothing in these images is solver output.
+
+![Visualiser with the MP litmus test executed](docs/captures/visualiser-mp-overview.png)
+
+*The built-in MP (message passing) litmus test, stepped through by hand: Thread 1 writes X and then Y with release, and Thread 2 reads Y=1 with acquire and then X=1. The left panel shows the program, controls and final register values; the right panel shows the execution graph.*
+
+![Execution graph for the MP run](docs/captures/visualiser-mp-execution-graph.png)
+
+*The graph pane from the same run, drawn by the visualiser, not by WEV-SMT. Initial writes (orange), writes (pink) and reads (green) are joined by po, rf, co and sw edges. The teal sw edge comes from the release/acquire pair on Y and runs alongside the rf edge between the same two events; their labels are offset so both show.*
+
+These captures come from the visualiser after a presentation-only stylesheet change in `MainController.graphStyle()`: wider event boxes so labels fit, and separate label offsets for rf and sw edges. Events, edges and the checker are unchanged.
+
+### WEV-SMT command line
+
 These are renders of real terminal output from 2026-11-14 on Windows 11 (JDK 21.0.10, Maven 3.9.11, Isabelle2024). The text versions are next to the images in `docs/captures/`.
 
 ![Isabelle build of all four sessions](docs/captures/isabelle-build.png)
@@ -124,6 +145,18 @@ These are renders of real terminal output from 2026-11-14 on Windows 11 (JDK 21.
 ## Known issues
 
 `CorpusValidationManifestTest.exhaustedBudgetYieldsTimeoutRowsForEveryEntryAndModel` failed once during validation on 2026-11-14 (expected `TIMEOUT`, got `UNSAT`). It then passed six isolated runs and a further full `mvn test`. The test runs with a zero time budget, so timing sensitivity is the suspected cause. That has not been confirmed, and the issue is not resolved.
+
+### Visualiser checker issues
+
+These concern the JavaFX visualiser's own checker (`src/main/java/com/weakest/ui/ExecutionEnumerator.java`), not WEV-SMT. They are not fixed. For each, "observed" is what the implementation does, checked by running it; "expected" is a claim about the standard models.
+
+**MP in "Compare All Models".**
+- Observed: for the built-in MP test (relaxed write to X, release write to Y; acquire read of Y, relaxed read of X), the view lists `r1=1, r2=0` as allowed under TSO, PSO, RA and WEAKEST. The visualiser's own step-by-step panel says the sw edge forbids it. In the code, `isTSOValid` only checks same-location coherence and store forwarding, and `isRAValid` only checks that an acquire read reads from a release write; neither relates the two locations.
+- Expected: TSO and release/acquire both forbid `r1=1, r2=0` for this program.
+
+**Model hierarchy banner.** The same view says "Each model ALLOWS everything the model to its left allows, plus more" for SC, TSO, PSO, RA and WEAKEST.
+- Observed: for `write(X, 1, rlx)` in one thread and `@r1 = read(X, acq)` in another, the visualiser's enumerator gives `r1=0` and `r1=1` under SC, TSO, PSO and WEAKEST but only `r1=0` under RA, because its RA rule rejects an acquire read from a relaxed write. So the banner does not hold for the visualiser's own checker.
+- Expected: PSO and RA are incomparable. PSO allows the MP outcome `r1=1, r2=0` because it can reorder the two stores, while RA forbids it when the flag is written with release and read with acquire; RA allows the IRIW weak outcome, which PSO, being multi-copy atomic, forbids. In standard C11-style semantics an acquire read may also read from a relaxed write (it just does not synchronise), so the RA rule above is itself stricter than usual.
 
 ## Historical material
 

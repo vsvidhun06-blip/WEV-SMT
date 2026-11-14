@@ -2031,7 +2031,9 @@ public class MainController {
     //noinspection CssUnknownUnit,CssUnknownProperty,CssInvalidPropertyValue,CssInvalidFunction
     private String graphStyle() {
         return "graph{padding:150px;}" +
-                "node{shape:rounded-box;size:150px,50px;fill-color:#313244;" +
+                // Wide enough for the longest event label at text-size 14 (e.g. "R[T2](Y=1,acquire)").
+                // The JavaFX renderer draws these boxes square, so only one size is given.
+                "node{shape:rounded-box;size:210px;fill-color:#313244;" +
                 "stroke-mode:plain;stroke-color:#89b4fa;stroke-width:2px;" +
                 "text-color:#cdd6f4;text-style:bold;text-size:14;}" +
                 "node.init{stroke-color:#fab387;text-color:#fab387;}" +
@@ -2042,10 +2044,11 @@ public class MainController {
                 "text-size:12;text-color:#cdd6f4;" +
                 "text-background-mode:rounded-box;text-background-color:#1e1e2e;text-padding:3px;" +
                 "fill-color:#89b4fa;size:2px;}" +
-                "edge.rf{fill-color:#a6e3a1;size:2px;}" +
+                // rf and sw can join the same two events; offset their labels so both stay readable.
+                "edge.rf{fill-color:#a6e3a1;size:2px;text-offset:0px,14px;}" +
                 "edge.po{fill-color:#89b4fa;size:2px;}" +
                 "edge.co{fill-color:#cba6f7;size:2px;stroke-mode:dashes;}" +
-                "edge.sw{fill-color:#94e2d5;size:4px;}" +
+                "edge.sw{fill-color:#94e2d5;size:4px;text-offset:0px,-14px;}" +
                 "edge.cycle{fill-color:#ff0000;size:4px;text-color:#ff0000;}";
     }
 
