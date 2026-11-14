@@ -89,8 +89,11 @@ public final class AxiomaticConsistency {
     public BooleanFormula consistencySC() { return consistencySC(noGate()); }
     public BooleanFormula consistencyTSO() { return consistencyTSO(noGate()); }
     public BooleanFormula consistencyPSO() { return consistencyPSO(noGate()); }
+    public BooleanFormula consistencyPSOCanonical() { return consistencyPSOCanonical(noGate()); }
     public BooleanFormula consistencyRA() { return consistencyRA(noGate()); }
+    public BooleanFormula consistencyRA_FORMAL() { return consistencyRA_FORMAL(noGate()); }
     public BooleanFormula consistencyWEAKEST() { return consistencyWEAKEST(noGate()); }
+    public BooleanFormula consistencyRC11() { return consistencyRC11(noGate()); }
 
     // ── Gated consistency (one source of truth for sub-executions too) ─────
 
@@ -135,6 +138,35 @@ public final class AxiomaticConsistency {
         return bmgr.and(cs);
     }
 
+    /**
+     * True SPARC PSO (the canonical Total-Store-then-Partial-Store model): exactly
+     * {@link #consistencyPSO} <em>without</em> the {@link #irreflexiveHbEco} conjunct.
+     *
+     * <p>The ppo layer here is {@code po \ (W→R ∪ W→W same-thread)} unioned with
+     * {@code rfe ∪ co ∪ fr} and per-location coherence — the pure SPARC PSO relaxation,
+     * which drains both the store→load and store→store forwarding a partial store buffer
+     * permits. It deliberately drops the RC11 release/acquire term {@code irreflexive(hb;
+     * eco?)} that {@link #consistencyPSO} adds (Pass 2c): that term reintroduces ordering
+     * for release/acquire-synchronised cross-location {@code W→R} pairs (CO-MP /
+     * MP-relacq), which canonical SPARC PSO — having no release/acquire fragment — does
+     * <em>not</em> preserve. So on synchronised store-buffering shapes this model is
+     * strictly weaker than our PSO (it ALLOWS where PSO FORBIDS); on everything the ppo
+     * layer already orders, the two coincide.
+     */
+    public BooleanFormula consistencyPSOCanonical(Function<Event, BooleanFormula> active) {
+        Map<Event, IntegerFormula> layer = freshLayer("psocanon");
+        List<BooleanFormula> cs = new ArrayList<>();
+        addPo(cs, layer, true, true, active);
+        addRf(cs, layer, true, false, active);
+        addCo(cs, layer, active);
+        addFr(cs, layer, active);
+        cs.add(coherencePerLocation(active));
+        cs.add(rmwAtomicity(active));
+        // No irreflexiveHbEco: canonical SPARC PSO keeps only ppo ∪ rfe ∪ co ∪ fr acyclic
+        // plus per-location coherence — no RC11 release/acquire hb;eco cross-location W→R.
+        return bmgr.and(cs);
+    }
+
     public BooleanFormula consistencyRA(Function<Event, BooleanFormula> active) {
         List<BooleanFormula> cs = new ArrayList<>();
         cs.add(irreflexiveHbEco(active));
@@ -142,6 +174,42 @@ public final class AxiomaticConsistency {
         // cheap, independent safety net (and shared with the other models).
         cs.add(coherencePerLocation(active));
         cs.add(rmwAtomicity(active));
+        return bmgr.and(cs);
+    }
+
+    /**
+     * <b>RA_FORMAL</b> — the release/acquire model stated as a first-class, named axiom for
+     * the formal {@code SC ⊇ TSO ⊇ RA_FORMAL ⊇ WEAKEST} strength chain (TACAS reviewer M1).
+     *
+     * <p><b>sw (synchronises-with).</b> A release write consumed by an acquire read of the
+     * same location synchronises: {@code sw = [W⊒rel] ; rf ; [R⊒acq]} — exactly the base
+     * edge {@link #irreflexiveHbEco} adds to {@code hb} (see {@link #isReleaseLike} /
+     * {@link #isAcquireLike}, which also fold in the C/C++ fence-to-release/acquire rules).
+     *
+     * <p><b>Axiom.</b> {@code irreflexive(hb ; eco?)} with {@code hb = (po ∪ sw)+} and
+     * {@code eco = (rf ∪ co ∪ fr)+} — the RC11 release/acquire coherence axiom (Lahav,
+     * Vafeiadis, Kang, Hur &amp; Dreyer, PLDI 2017, §3), plus the shared per-location
+     * coherence and RMW-atomicity base. This is <em>definitionally identical</em> to
+     * {@link #consistencyRA}; RA_FORMAL is the same relation exposed under an explicit name
+     * so the chain atlas can pin it as the RA rung.
+     *
+     * <p><b>Why not {@code acyclic(po ∪ sw ∪ rf ∪ co ∪ fr)}.</b> The tempting
+     * single-acyclicity phrasing does not give RA. Because {@code sw ⊆ rf}, unioning full
+     * {@code rf} with full {@code po} yields precisely SC's {@code acyclic(po ∪ rf ∪ co ∪ fr)}.
+     * Even restricted to {@code acyclic(po ∪ sw ∪ co ∪ fr)}, full {@code po} together with
+     * {@code fr} already closes the SB cycle {@code Wx→Ry→Wy→Rx→Wx}, so it FORBIDS SB / R /
+     * IRIW — strictly stronger than TSO, which breaks the {@code TSO ⊇ RA} rung of the very
+     * chain this model is meant to establish. (This codebase used that single-layer encoding
+     * historically and replaced it for exactly this reason; see {@link #irreflexiveHbEco}.)
+     * The {@code hb ; eco?} form keeps the two-{@code eco}-segment cycles (SB / R / IRIW)
+     * allowed and only forbids the one-segment {@code hb ; eco} cycles (MP-relacq / CO-MP),
+     * which is what places RA_FORMAL properly between TSO and WEAKEST.
+     */
+    public BooleanFormula consistencyRA_FORMAL(Function<Event, BooleanFormula> active) {
+        List<BooleanFormula> cs = new ArrayList<>();
+        cs.add(irreflexiveHbEco(active));       // irreflexive(hb;eco?), hb = (po ∪ sw)+
+        cs.add(coherencePerLocation(active));   // SC-per-location (shared base)
+        cs.add(rmwAtomicity(active));           // no co-intervening write in an RMW (shared base)
         return bmgr.and(cs);
     }
 
@@ -179,6 +247,49 @@ public final class AxiomaticConsistency {
         }
         cs.add(coherencePerLocation(active));
         cs.add(jfCoherence(active));
+        cs.add(rmwAtomicity(active));
+        return bmgr.and(cs);
+    }
+
+    /**
+     * RC11 thin-air baseline (paper §6.4): {@code acyclic(po ∪ rf)} over the shared base
+     * of {@link #coherencePerLocation} and {@link #rmwAtomicity}.
+     *
+     * <p>RC11 repairs the SC-DRF gap left open by C/C++11 by <em>syntactically</em>
+     * forbidding every {@code sb ∪ rf} cycle — {@code acyclic(po ∪ rf)} (Lahav,
+     * Vafeiadis, Kang, Hur &amp; Dreyer, "Repairing Sequential Consistency in C/C++11",
+     * PLDI 2017, §4, the no-thin-air axiom). This kills load-buffering unconditionally:
+     * it makes no distinction between a cycle carried by a genuine data/address/control
+     * dependency (a real thin-air read) and one carried by a fake/identity dependency
+     * that a compiler would optimise away. Encoded exactly like SC's acyclicity but over
+     * {@code po ∪ rf} only (no {@code co}/{@code fr} in the layer): a single fresh integer
+     * layer, {@code addPo} with no W→R / W→W relaxation and {@code addRf} over all rf
+     * edges, forcing {@code layer(a) < layer(b)} on each base edge — a strict order admits
+     * no cycle, so this is precisely {@code irreflexive((po ∪ rf)⁺)}.
+     *
+     * <p><b>Contrast with WEAKEST.</b> {@link #consistencyWEAKEST} replaces this blanket
+     * {@code po} term with the dependency-sensitive {@link #jfCoherence}
+     * ({@code acyclic(sdep ∪ jf)}), which only closes a cycle through <em>semantic</em>
+     * dependency edges. On grounded LB (fake/identity deps) WEAKEST finds no {@code sdep}
+     * edge and permits the execution, whereas RC11's {@code po} term still forbids it —
+     * the exact divergence documented in §6.4. On real thin-air (genuine deps closing the
+     * cycle) both forbid, since the {@code sdep} edges coincide with the {@code po} edges
+     * that carry the value.
+     *
+     * <p>This is a deliberately simplified RC11: our litmus format carries no
+     * release/acquire annotations, so we omit RC11's {@code irreflexive(hb ; eco?)}
+     * release/acquire coherence and its SC-fence axiom, keeping only the no-thin-air axiom
+     * that this comparison turns on. Per-location coherence and RMW atomicity are the same
+     * shared base every model enforces.
+     */
+    public BooleanFormula consistencyRC11(Function<Event, BooleanFormula> active) {
+        Map<Event, IntegerFormula> layer = freshLayer("rc11");
+        List<BooleanFormula> cs = new ArrayList<>();
+        // acyclic(po ∪ rf): full program order (no W→R / W→W relaxation) unioned with all
+        // reads-from, in ONE layer — RC11's syntactic no-thin-air repair.
+        addPo(cs, layer, false, false, active);
+        addRf(cs, layer, false, false, active);
+        cs.add(coherencePerLocation(active));
         cs.add(rmwAtomicity(active));
         return bmgr.and(cs);
     }
@@ -453,9 +564,9 @@ public final class AxiomaticConsistency {
 
     /**
      * Preserved-program-order edges for a model layer, <em>fence-transparent</em>. The
-     * relation is built over <em>consecutive accesses</em> (a load/store/RMW and the
-     * next access reachable in program order, skipping over intervening fence nodes,
-     * which carry no layer of their own). {@code skipWriteRead}/{@code skipWriteWrite}
+     * relation is built over access pairs (a load/store/RMW and an access reachable in
+     * program order, skipping over intervening fence nodes, which carry no layer of
+     * their own). {@code skipWriteRead}/{@code skipWriteWrite}
      * drop the same W→R (TSO) and W→W (PSO) pairs as before, <em>unless</em> the pair is
      * restored by a fence between them or by an RMW endpoint (Day 12):
      * <ul>
@@ -467,19 +578,25 @@ public final class AxiomaticConsistency {
      *       restored — transitively chaining a store before the RMW ahead of a load
      *       after it (x86 {@code LOCK XCHG} acts as a full fence).</li>
      * </ul>
-     * With no fences and no RMWs this reduces <em>exactly</em> to the previous adjacent
-     * po-edge encoding (each access's only onward access is its immediate po-successor),
-     * so every fence-free case is unchanged. Fences themselves are anchored only in the
+     * Fences themselves are anchored only in the
      * global {@code pos} well-formedness order, never given a model layer (no edges ⇒
      * they can neither create nor break a cycle). Cf. Alglave, Maranget &amp;
      * Tautschnig, "Herding Cats" (TOPLAS 2014) §4 for per-architecture fence semantics.
+     *
+     * <p>When a relaxation is on (TSO/PSO), the filter is applied to <em>every</em>
+     * po-ordered access pair, not only to consecutive ones: filtering the consecutive
+     * hops first and then closing transitively loses ordered pairs that span a relaxed
+     * hop (TSO {@code R y; W z; R x} keeps {@code R y → R x} although
+     * {@code W z → R x} is dropped). With no relaxation every hop is kept, so the
+     * consecutive edges already close to all of po and that path is unchanged.
      */
     private void addPo(List<BooleanFormula> cs, Map<Event, IntegerFormula> layer,
                        boolean skipWriteRead, boolean skipWriteWrite,
                        Function<Event, BooleanFormula> active) {
+        boolean relaxing = skipWriteRead || skipWriteWrite;
         for (Event a : es.getEvents()) {
             if (!accesses(a)) continue;                  // anchor at accesses; skip fences
-            for (AccessHop hop : nextAccessHops(a)) {
+            for (AccessHop hop : relaxing ? laterAccessHops(a) : nextAccessHops(a)) {
                 Event b = hop.access();
                 boolean relaxed = (skipWriteRead && isWriteOrInit(a) && b instanceof ReadEvent)
                         || (skipWriteWrite && isWriteOrInit(a) && isWriteOrInit(b));
@@ -520,6 +637,40 @@ public final class AxiomaticConsistency {
                 }
             } else {
                 out.add(new AccessHop(e, f.crossed()));   // an access ends the hop
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Every access po-after {@code a}, each with the fences crossed on the way to it
+     * (walking on past intermediate accesses, which add nothing to the crossed list).
+     * Like {@link #nextAccessHops} it visits each event once, so for the straight-line
+     * litmus threads it yields each later access exactly once.
+     */
+    private List<AccessHop> laterAccessHops(Event a) {
+        record Frame(int id, List<FenceEvent> crossed) { }
+        List<AccessHop> out = new ArrayList<>();
+        Map<Integer, List<Integer>> po = es.getProgramOrder();
+        Deque<Frame> stack = new ArrayDeque<>();
+        for (Integer s : po.getOrDefault(a.getId(), List.of())) {
+            stack.push(new Frame(s, List.of()));
+        }
+        Set<Integer> seen = new HashSet<>();
+        while (!stack.isEmpty()) {
+            Frame f = stack.pop();
+            if (!seen.add(f.id())) continue;
+            Event e = es.getEventById(f.id());
+            if (e == null) continue;
+            List<FenceEvent> nc = f.crossed();
+            if (e instanceof FenceEvent fe) {
+                nc = new ArrayList<>(f.crossed());
+                nc.add(fe);
+            } else {
+                out.add(new AccessHop(e, f.crossed()));
+            }
+            for (Integer s : po.getOrDefault(f.id(), List.of())) {
+                stack.push(new Frame(s, nc));
             }
         }
         return out;

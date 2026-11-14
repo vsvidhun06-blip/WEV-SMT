@@ -1,0 +1,9 @@
+C TC01
+(* JMM causality test case 1 (Pugh 2004). Plain load-buffering, no dependency:     *)
+(* both stores write the constant 1, independent of the load. JMM DECISION: ALLOWED *)
+(* (the independent stores may be committed early). Encodes with constant stores so  *)
+(* the r0=r0=1 outcome is wired faithfully; no data/addr/ctrl edge is recorded.      *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, 1); }
+exists (0:r0=1 /\ 1:r0=1)

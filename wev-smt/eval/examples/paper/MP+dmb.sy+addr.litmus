@@ -1,0 +1,14 @@
+AArch64 MP+dmb.sy+addr
+"Representative herd7 +addr idiom: an EOR-self address register feeding an"
+"AArch64 indexed load [Xbase,Windex,SXTW]. The index register carries a"
+"syntactic (fake, r^r) address dependency from the prior load. Checked in as a"
+"tracked regression fixture because eval/corpus is git-ignored."
+{
+0:X1=x; 0:X3=y; 0:W0=1; 0:W2=1;
+1:X1=y; 1:X4=x;
+}
+ P0          | P1                  ;
+ STR W0,[X1] | LDR W0,[X1]         ;
+ DMB SY      | EOR W2,W0,W0        ;
+ STR W2,[X3] | LDR W3,[X4,W2,SXTW] ;
+exists (1:W0=1 /\ 1:W3=0)

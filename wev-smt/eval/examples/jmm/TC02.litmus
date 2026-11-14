@@ -1,0 +1,10 @@
+C TC02
+(* JMM causality test case 2 (Pugh 2004). Load-buffering with a REAL data           *)
+(* dependency on both threads (store value r+1 is a genuine function of the load).   *)
+(* The r0=r0=1 outcome is out-of-thin-air. JMM DECISION: FORBIDDEN. Encoded with the *)
+(* r+1 idiom so the store value depends on the load (isSemantic=true) AND the LB      *)
+(* cycle is wired faithfully.                                                        *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, r0 + 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); }
+exists (0:r0=1 /\ 1:r0=1)

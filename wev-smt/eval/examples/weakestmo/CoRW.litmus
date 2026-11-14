@@ -1,0 +1,8 @@
+C CoRW
+(* Weakestmo (Chakraborty & Vafeiadis, POPL 2019): coherence read-write (CoRW1).    *)
+(* A thread reads x then writes x=1. The read reads-from its own program-order-later *)
+(* store (r0=1), which puts po and rf in opposite directions between the same two    *)
+(* events — an SC-per-location cycle. Weakestmo FORBIDS it.                          *)
+{ }
+P0(int *x) { r0 = READ_ONCE(*x); WRITE_ONCE(*x, 1); }
+exists (0:r0=1)

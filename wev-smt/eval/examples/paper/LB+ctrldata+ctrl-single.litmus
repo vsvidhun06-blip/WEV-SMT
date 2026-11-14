@@ -1,0 +1,19 @@
+C LB+ctrldata+ctrl-single
+(* Batty et al. §4 control-dependency example, "single" variant: only ONE branch    *)
+(* writes, so the store is genuinely control-dependent on the read (it happens iff   *)
+(* r == 42). Here a precise (semantic) dependency analysis AGREES the ctrl edge is   *)
+(* real and FORBIDS the LB cycle. The intended C source is:                          *)
+(*                                                                                  *)
+(*   P0: r0 = READ_ONCE(*x); if (r0 == 42) WRITE_ONCE(*y,42)                         *)
+(*   P1: r1 = READ_ONCE(*y); if (r1 == 42) WRITE_ONCE(*x,42)                         *)
+(*                                                                                  *)
+(* As with the -double variant the wev-smt parser flattens the conditional store to  *)
+(* a branch-on-read followed by the store, recording read->store ctrl with           *)
+(* isSemantic=true. Under the CURRENT detector this is in sdep, so jfCoherence        *)
+(* forbids the LB cycle: EXPECTED current verdict = FORBIDDEN. Unlike -double this    *)
+(* verdict is also what a precise analysis would give, so 'current' and the          *)
+(* hypothetical sdep_true coincide here; the 'none' ablation still over-allows it.   *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); if (r0 == 42) ; WRITE_ONCE(*y, 42); }
+P1(int *x, int *y) { r1 = READ_ONCE(*y); if (r1 == 42) ; WRITE_ONCE(*x, 42); }
+exists (0:r0=42 /\ 1:r1=42)

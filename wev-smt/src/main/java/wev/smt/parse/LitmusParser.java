@@ -26,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -97,6 +98,52 @@ public final class LitmusParser {
 
         boolean isAsm() { return this != C; }
     }
+
+    // ── Detector-quality instrumentation (additive; inert unless a sink is set) ──
+
+    /**
+     * One classification decision the fake/semantic detector ({@link Job#dependsReally})
+     * makes: for a single register {@code reg} used in {@code expr}, whether that use is a
+     * <em>real</em> (value-carrying) dependency, and which idiom {@code pattern} the
+     * verdict rests on ({@code "REAL"} when no cancellation fires). {@code producerReadIds}
+     * are the ids of the {@link ReadEvent}s whose value reaches {@code expr} through
+     * {@code reg} — the producers of any dependency edge this decision governs.
+     *
+     * <p>Emitted only when {@link #DEP_TRACE} is installed; the field is inert (and the
+     * detector byte-for-byte unchanged) otherwise. Not thread-safe by design — a sweep
+     * sets the sink, parses one file, drains it, single-threaded.
+     */
+    public record DepDecision(String expr, String reg, boolean real, String pattern,
+                              List<Integer> producerReadIds, int threadId, int instrIndex) { }
+
+    /** Optional sink for {@link DepDecision}s; {@code null} (the default) disables tracing. */
+    public static volatile java.util.function.Consumer<DepDecision> DEP_TRACE = null;
+
+    /**
+     * Pluggable exact constancy oracle for the dependency detector. Given a value
+     * expression {@code expr} and a register {@code reg} that the O(1) idiom fast-path did
+     * <em>not</em> already fold to a constant, it returns {@code TRUE} if {@code expr} is
+     * provably <em>constant</em> in {@code reg} (a fake dependency), {@code FALSE} if it
+     * provably <em>varies</em> with {@code reg} (a real dependency), or {@code null} if the
+     * expression is outside the oracle's modelled grammar — in which case the detector
+     * falls back to a conservative <em>semantic</em> classification.
+     *
+     * <p>{@code null} by default (inert): with no oracle installed the detector uses its
+     * solver-free linear-cancellation fallback, so the parser carries no solver dependency
+     * for its many callers and the default classification is byte-for-byte unchanged.
+     * Installing an oracle (e.g. {@code wev.smt.QfbvConstancyOracle}) makes it the
+     * <em>primary</em> decision procedure after the idiom fast-path, so
+     * {@code sdep_impl = sdep_true} exactly on the modelled (branch-free bitvector-arithmetic)
+     * fragment. Not thread-safe by design — set it, run single-threaded, then clear it.
+     */
+    @FunctionalInterface
+    public interface ConstancyOracle {
+        /** {@code TRUE}=constant/fake, {@code FALSE}=varies/real, {@code null}=undecided. */
+        Boolean isConstant(String expr, String reg);
+    }
+
+    /** Optional exact constancy oracle; {@code null} (default) selects the solver-free path. */
+    public static volatile ConstancyOracle CONSTANCY_ORACLE = null;
 
     // ── Public API ──────────────────────────────────────────────────────────
 
@@ -186,6 +233,23 @@ public final class LitmusParser {
         final Map<Integer, Map<String, Integer>> regConstInit = new LinkedHashMap<>(); // P -> reg -> int
         final Map<Integer, Map<String, String>> regAddrInit = new LinkedHashMap<>();   // P -> reg -> var
 
+        // AArch64 register identity (see armCanonical): Wn and Xn name one register, keyed
+        // Xn everywhere. Per thread: the 64-bit initial value of each constant-initialised
+        // register (contradiction check; upper-zero width state), and the names whose initial
+        // value is outside the modelled forms (page-table / tag values, arrays) — any use of
+        // those is rejected rather than silently read as 0.
+        final Map<Integer, Map<String, Long>> armInit64 = new LinkedHashMap<>();
+        final Map<Integer, Set<String>> armUnsupportedInitRegs = new LinkedHashMap<>();
+        final Set<String> armUnsupportedInitLocs = new LinkedHashSet<>();
+        // Width state of the thread being lowered: whether each register's 64-bit value is
+        // the zero-extension of the 32-bit value the model tracks. Plus each thread's final
+        // register state, which outcome binding resolves exists-clause registers against.
+        Map<String, Boolean> armUpperZero = new LinkedHashMap<>();
+        int armWidthThread = -1;
+        final Map<Integer, Map<String, String>> armFinalSymbolic = new LinkedHashMap<>();
+        final Map<Integer, Map<String, Boolean>> armFinalUpperZero = new LinkedHashMap<>();
+        final Map<Integer, Set<String>> armFinalAddr = new LinkedHashMap<>();
+
         // Built structure.
         final EventStructure es = new EventStructure();
         final DependencyInfo deps = new DependencyInfo();
@@ -193,6 +257,23 @@ public final class LitmusParser {
         final Map<String, WriteEvent> initOf = new LinkedHashMap<>();
         final Map<String, List<WriteEvent>> programWrites = new LinkedHashMap<>();
         final Map<String, ReadEvent> readByThreadReg = new LinkedHashMap<>();    // "P:reg" -> last read
+
+        // Current site being lowered (for DepDecision tracing / the Layer-2 audit): the
+        // WEV thread id and the 0-based instruction index within the thread. Inert unless
+        // DEP_TRACE is installed; updated by buildThread as it walks each thread's rows.
+        int curThreadId = 0;
+        int curInstrIndex = -1;
+
+        // C1 symbolic value model (additive; never changes the folded constant values). Per
+        // WriteEvent id, the symbolic value expression as a string over R<readId> variables,
+        // integer literals and the QF_BV operators (e.g. "R5+1", "R3^R3^1", "2"); per
+        // exists-named ReadEvent id, the value the exists clause pins it to. Consumed only by
+        // SymbolicRfEncoder; ignored in wired mode. See parse/SYMBOLIC_RF_DESIGN.md.
+        final Map<Integer, String> writeValueExprs = new LinkedHashMap<>();
+        final Map<Integer, Integer> existsReadValues = new LinkedHashMap<>();
+        // C1: memory-final constraints from the exists clause (loc=val, no thread:reg), for
+        // symbolic coherence tests (CoWW/CoWR family) whose outcome pins the co-maximal value.
+        final Map<String, Integer> existsMemFinal = new LinkedHashMap<>();
 
         Job(String content, String sourceName) {
             this.src = sourceName;
@@ -216,7 +297,8 @@ public final class LitmusParser {
                         "[" + src + "] parsed structure is invalid", report);
             }
             return new LitmusCase(src, arch, name, es, deps, existsClause,
-                    expectations, herdObservation);
+                    expectations, herdObservation, writeValueExprs, existsReadValues,
+                    existsMemFinal);
         }
 
         // ── Comments → expectations ───────────────────────────────────────────
@@ -362,6 +444,10 @@ public final class LitmusParser {
             for (String stmt : body.split(";")) {
                 String s = stmt.strip();
                 if (s.isEmpty()) continue;
+                if (arch == Arch.ARM) {
+                    armInitStatement(s);
+                    continue;
+                }
                 Matcher reg = INIT_REG.matcher(s);
                 if (reg.matches()) {
                     int p = Integer.parseInt(reg.group(1));
@@ -381,6 +467,102 @@ public final class LitmusParser {
                 }
                 // Anything else in the init block (type decls like `int *x`) is ignored.
             }
+        }
+
+        private static final Pattern ARM_SCALAR_TYPE = Pattern.compile(
+                "(?:unsigned\\s+int|int32_t|uint32_t|int64_t|uint64_t|unsigned|long|int)\\s+");
+        private static final Pattern ARM_INIT_NAMED_REG = Pattern.compile("(\\d+)\\s*:\\s*([A-Za-z_]\\w*)\\s*=");
+        private static final Pattern ARM_INIT_NAMED_LOC = Pattern.compile(
+                "(?:[A-Za-z_]\\w*\\s+)*\\*?\\s*([A-Za-z_]\\w*)");
+
+        /**
+         * One AArch64 initial-state statement. Register names are canonical (Wn/Xn → Xn);
+         * scalar type prefixes ({@code int64_t 0:X2=0}, {@code int64_t x=1}) are accepted;
+         * a register initialised under both names must agree on its 64-bit value (a W
+         * initialiser zero-extends: {@code W3=-1} is {@code 0x00000000FFFFFFFF}, {@code X3=-1}
+         * is all ones). Statements whose value the model cannot represent (page-table and
+         * tag values, arrays) mark their name as unsupported instead of being ignored.
+         */
+        private void armInitStatement(String s) {
+            String t = s;
+            boolean typed = false;
+            Matcher ty = ARM_SCALAR_TYPE.matcher(t);
+            if (ty.lookingAt()) {
+                t = t.substring(ty.end()).strip();
+                typed = true;
+            }
+            Matcher reg = INIT_REG.matcher(t);
+            if (reg.matches()) {
+                int p = Integer.parseInt(reg.group(1));
+                String r = armCanonical(reg.group(2));
+                if (r == null) r = reg.group(2);              // not a W/X GPR (e.g. AArch32 R0)
+                String val = reg.group(3);
+                Map<String, Integer> consts = regConstInit.computeIfAbsent(p, k -> new LinkedHashMap<>());
+                Map<String, String> addrs = regAddrInit.computeIfAbsent(p, k -> new LinkedHashMap<>());
+                if (val.matches("-?\\d+|0x[0-9A-Fa-f]+")) {
+                    Long lv = armLiteral(val);
+                    if (lv == null) {                            // wider than 64 bits
+                        armUnsupportedInitRegs.computeIfAbsent(p, k -> new LinkedHashSet<>()).add(r);
+                        return;
+                    }
+                    int v = (int) (long) lv;                     // the low 32 bits the model tracks
+                    long v64 = reg.group(2).matches("[Ww]\\d+") ? (lv & 0xffffffffL) : lv;
+                    Long prev = armInit64.computeIfAbsent(p, k -> new LinkedHashMap<>()).putIfAbsent(r, v64);
+                    if ((prev != null && prev != v64) || addrs.containsKey(r)) {
+                        throw armUnsupported(-1, "contradictory initial values for register " + r
+                                + " of P" + p + " (W/X aliases name one register)", s);
+                    }
+                    consts.put(r, v);
+                } else {
+                    String prevAddr = addrs.putIfAbsent(r, val);
+                    if ((prevAddr != null && !prevAddr.equals(val)) || consts.containsKey(r)) {
+                        throw armUnsupported(-1, "contradictory initial values for register " + r
+                                + " of P" + p + " (W/X aliases name one register)", s);
+                    }
+                }
+                return;
+            }
+            Matcher mem = INIT_MEM.matcher(t);
+            if (mem.matches()) {
+                // A location holds a 32-bit value in the model; a value that is not one
+                // (e.g. int64_t x=0x0000000100000001) cannot be represented.
+                Long lv = armLiteral(mem.group(2));
+                if (lv == null || lv < Integer.MIN_VALUE || lv > 0xffffffffL) {
+                    armUnsupportedInitLocs.add(mem.group(1));
+                } else {
+                    initValues.put(mem.group(1), (int) (long) lv);
+                }
+                return;
+            }
+            if (typed && t.matches("[A-Za-z_]\\w*")) return;            // declaration: value 0
+            Matcher ur = ARM_INIT_NAMED_REG.matcher(t);
+            if (ur.lookingAt()) {
+                String r = armCanonical(ur.group(2));
+                armUnsupportedInitRegs.computeIfAbsent(Integer.parseInt(ur.group(1)), k -> new LinkedHashSet<>())
+                        .add(r == null ? ur.group(2) : r);
+                return;
+            }
+            Matcher ul = ARM_INIT_NAMED_LOC.matcher(t);
+            if (ul.lookingAt()) armUnsupportedInitLocs.add(ul.group(1));
+        }
+
+        /** A decimal or hex initial-state literal as a 64-bit value (hex is unsigned), or null if wider. */
+        private static Long armLiteral(String s) {
+            String t = s.strip();
+            boolean neg = t.startsWith("-");
+            if (neg) t = t.substring(1);
+            try {
+                long v = (t.startsWith("0x") || t.startsWith("0X"))
+                        ? Long.parseUnsignedLong(t.substring(2), 16) : Long.parseLong(t);
+                return neg ? -v : v;
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+
+        private ParseException armUnsupported(int line, String why, String text) {
+            return new ParseException(src, line, ParseException.Kind.UNSUPPORTED_INSTRUCTION,
+                    "AArch64 " + why + ": " + text);
         }
 
         // ── Body: split into per-thread instruction lists ─────────────────────────
@@ -509,12 +691,72 @@ public final class LitmusParser {
                 List<RawInstr> stmts = new ArrayList<>();
                 for (String st : inner.split(";")) {
                     String s = st.strip();
-                    if (!s.isEmpty()) stmts.add(new RawInstr(s, from + 1));
+                    if (s.isEmpty()) continue;
+                    for (String piece : splitGuardedStatement(s)) {
+                        stmts.add(new RawInstr(piece, from + 1));
+                    }
                 }
                 threads.add(stmts);
                 searchFrom = close + 1;
             }
             return threads;
+        }
+
+        private static final Pattern ELSE_PREFIX = Pattern.compile("(?i)^else\\b\\s*");
+        private static final Pattern IF_PREFIX = Pattern.compile("(?i)^if\\s*\\(");
+
+        /**
+         * Split a guarded statement {@code "if (c) STMT"} into the guard {@code "if (c)"}
+         * and the guarded statement {@code "STMT"}, and strip a leading {@code else}.
+         *
+         * <p>Without this, {@link Lexer#lexC} matches {@code C_WRITE_ONCE} with
+         * {@code .find()} (a substring search) before it ever reaches the
+         * {@code if|while|for} test, so {@code "if (r0==1) WRITE_ONCE(*x,1)"} lexes as a
+         * bare store and <em>the guard is silently discarded</em> — no {@code BRANCH}
+         * instruction, hence no control edge. Splitting here restores parity with the
+         * {@code "if (c) ; STMT"} idiom, which only worked because the empty arm left
+         * {@code "if (c)"} as a statement of its own.
+         *
+         * <p>This is deliberately a lexical repair at the statement boundary: it changes
+         * no lexer rule, no dependency policy, and no {@code isSemantic} flag. Control
+         * edges remain unconditionally semantic, exactly as before.
+         *
+         * <p><b>What this does NOT fix.</b> There is still no branch structure: the arms
+         * of an {@code if/else} become straight-line statements, so a two-armed branch
+         * yields TWO write events where the program performs one. Representing that needs
+         * real branch structure in the event model and is out of scope here.
+         */
+        private static List<String> splitGuardedStatement(String s) {
+            List<String> out = new ArrayList<>();
+            String rest = s;
+            Matcher e = ELSE_PREFIX.matcher(rest);
+            if (e.find()) rest = rest.substring(e.end()).strip();
+            int g = guardEnd(rest);
+            if (g > 0) {
+                out.add(rest.substring(0, g).strip());
+                String body = rest.substring(g).strip();
+                if (!body.isEmpty()) out.add(body);
+            } else if (!rest.isEmpty()) {
+                out.add(rest);
+            }
+            return out;
+        }
+
+        /**
+         * Index just past the closing parenthesis of a leading {@code if (...)}, or -1 if
+         * {@code s} does not start with one. Parenthesis matching is balanced, so guards
+         * such as {@code if ((r0 & 1) == 1)} are handled.
+         */
+        private static int guardEnd(String s) {
+            Matcher m = IF_PREFIX.matcher(s);
+            if (!m.find()) return -1;
+            int depth = 0;
+            for (int i = m.end() - 1; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c == '(') depth++;
+                else if (c == ')' && --depth == 0) return i + 1;
+            }
+            return -1;
         }
 
         private String joinLines(int from, int to) {
@@ -526,13 +768,40 @@ public final class LitmusParser {
             return sb.toString();
         }
 
-        private static String stripInlineComment(String line) {
-            int h = line.indexOf('#');
+        /**
+         * Cut a trailing {@code #…} or {@code //…} comment from a body line.
+         *
+         * <p>On AArch64 {@code #} is also the immediate prefix ({@code MOV W0,#1},
+         * {@code ADD W2,W0,#1}). Treating that {@code #} as a comment cut the rest of the
+         * physical line — including the other threads' cells and the {@code ;} row
+         * terminator — so rows merged and instructions (stores among them) silently
+         * disappeared. A {@code #} immediately followed by an immediate literal (optional
+         * sign, then a digit) is therefore kept on ARM; every other {@code #} still starts
+         * a comment, and other dialects are unchanged.
+         */
+        private String stripInlineComment(String line) {
+            int h = commentHash(line);
             int s = line.indexOf("//");
             int cut = line.length();
             if (h >= 0) cut = Math.min(cut, h);
             if (s >= 0) cut = Math.min(cut, s);
             return line.substring(0, cut);
+        }
+
+        /** Index of the first {@code #} that begins a comment, or -1 if there is none. */
+        private int commentHash(String line) {
+            for (int i = line.indexOf('#'); i >= 0; i = line.indexOf('#', i + 1)) {
+                if (arch == Arch.ARM && isImmediatePrefix(line, i)) continue;
+                return i;
+            }
+            return -1;
+        }
+
+        /** Whether the {@code #} at {@code i} prefixes an immediate literal ({@code #1}, {@code #-4}, {@code #0x10}). */
+        private static boolean isImmediatePrefix(String line, int i) {
+            int j = i + 1;
+            if (j < line.length() && (line.charAt(j) == '-' || line.charAt(j) == '+')) j++;
+            return j < line.length() && Character.isDigit(line.charAt(j));
         }
 
         // ── Event construction (per-thread dataflow) ──────────────────────────────
@@ -547,15 +816,22 @@ public final class LitmusParser {
             int threadId = pIndex + 1;                       // thread 0 reserved for inits
             Map<String, RegSrc> regEnv = new LinkedHashMap<>();
             Map<String, String> addrEnv = new LinkedHashMap<>();
+            // C1: per-register symbolic value string (over R<readId> vars + literals), the
+            // dataflow the constant folding erases. Kept in lockstep with regEnv.
+            Map<String, String> regSymbolic = new LinkedHashMap<>();
             // Seed from thread-local init bindings.
             regConstInit.getOrDefault(pIndex, Map.of())
-                    .forEach((r, v) -> regEnv.put(r, RegSrc.constant(v)));
+                    .forEach((r, v) -> { regEnv.put(r, RegSrc.constant(v));
+                                          regSymbolic.put(r, Integer.toString(v)); });
             addrEnv.putAll(regAddrInit.getOrDefault(pIndex, Map.of()));
 
             List<ReadEvent> ctrlReads = new ArrayList<>();
             Event prevMem = null;
 
-            for (RawInstr ri : rawInstrs) {
+            for (int instrIdx = 0; instrIdx < rawInstrs.size(); instrIdx++) {
+                RawInstr ri = rawInstrs.get(instrIdx);
+                curThreadId = threadId;
+                curInstrIndex = instrIdx;
                 Insn in = lex(ri);
                 switch (in.kind()) {
                     case NOP -> { /* no event in the WEV model */ }
@@ -565,8 +841,14 @@ public final class LitmusParser {
                         es.addEvent(f);
                         prevMem = link(prevMem, f);
                     }
-                    case IMM -> regEnv.put(in.reg(), RegSrc.constant(parseIntLit(in.expr())));
-                    case ASSIGN -> regEnv.put(in.reg(), deriveReg(in.expr(), regEnv));
+                    case IMM -> {
+                        regEnv.put(in.reg(), RegSrc.constant(parseIntLit(in.expr())));
+                        regSymbolic.put(in.reg(), Integer.toString(parseIntLit(in.expr())));
+                    }
+                    case ASSIGN -> {
+                        regEnv.put(in.reg(), deriveReg(in.expr(), regEnv));
+                        regSymbolic.put(in.reg(), substituteSymbolic(in.expr(), regSymbolic));
+                    }
                     case BRANCH -> ctrlReads.addAll(
                             readsOf(referencedReads(in.expr(), regEnv)));
                     case LOAD -> {
@@ -576,8 +858,10 @@ public final class LitmusParser {
                         prevMem = link(prevMem, rd);
                         seenLocation(loc);
                         regEnv.put(in.reg(), RegSrc.ofRead(rd));
+                        regSymbolic.put(in.reg(), "R" + rd.getId());   // C1: register holds this read
                         readByThreadReg.put(pIndex + ":" + in.reg(), rd);
                         addAddrDeps(rd, in, regEnv);
+                        writeBack(in, addrEnv);
                     }
                     case STORE -> {
                         String loc = resolveLoc(in, addrEnv, ri);
@@ -588,9 +872,15 @@ public final class LitmusParser {
                         prevMem = link(prevMem, wr);
                         seenLocation(loc);
                         programWrites.computeIfAbsent(loc, k -> new ArrayList<>()).add(wr);
+                        // C1: retain the symbolic value function (over R<readId>), not just
+                        // the folded constant, so SymbolicRfEncoder can propagate real values.
+                        writeValueExprs.put(wr.getId(), in.expr() == null
+                                ? Integer.toString(value)
+                                : substituteSymbolic(in.expr(), regSymbolic));
                         addDataDeps(wr, in.expr(), regEnv);
                         addAddrDeps(wr, in, regEnv);
                         for (ReadEvent cr : ctrlReads) deps.addCtrlDep(wr, cr, true);
+                        writeBack(in, addrEnv);
                     }
                     case RMW -> {
                         // Day 12: a single atomic RMWEvent (read+write at one event id),
@@ -608,14 +898,25 @@ public final class LitmusParser {
                         prevMem = link(prevMem, u);
                         seenLocation(loc);
                         programWrites.computeIfAbsent(loc, k -> new ArrayList<>()).add(u);
+                        // C1: RMW value functions are not modelled — the written value is a
+                        // constant placeholder, so its symbolic value is that literal too.
+                        writeValueExprs.put(u.getId(), Integer.toString(newV));
                         addAddrDeps(u, in, regEnv);
                         if (in.reg() != null) {
                             // No separate read event to track; the loaded value flows on as
                             // a constant (RMW-carried dependencies are not modelled).
                             regEnv.put(in.reg(), RegSrc.constant(oldV));
+                            regSymbolic.put(in.reg(), Integer.toString(oldV));
                         }
                     }
                 }
+            }
+            if (arch == Arch.ARM) {
+                // The thread's final register state, for exists-clause binding (wireReadsFrom).
+                if (armWidthThread != pIndex) armEnterThread(pIndex);
+                armFinalSymbolic.put(pIndex, new LinkedHashMap<>(regSymbolic));
+                armFinalUpperZero.put(pIndex, new LinkedHashMap<>(armUpperZero));
+                armFinalAddr.put(pIndex, new LinkedHashSet<>(addrEnv.keySet()));
             }
         }
 
@@ -626,18 +927,65 @@ public final class LitmusParser {
         }
 
         private void seenLocation(String loc) {
+            if (arch == Arch.ARM && armUnsupportedInitLocs.contains(loc)) {
+                throw armUnsupported(-1, "access to location '" + loc
+                        + "' whose initial value is not a modelled integer", loc);
+            }
             if (locations.add(loc)) {
+                int initVal = initValues.getOrDefault(loc, 0);
                 WriteEvent init = new WriteEvent(0, loc, MemoryOrder.RELAXED,
-                        initValues.getOrDefault(loc, 0),
-                        Integer.toString(initValues.getOrDefault(loc, 0)));
+                        initVal, Integer.toString(initVal));
                 es.addEvent(init);
                 initOf.put(loc, init);
+                writeValueExprs.put(init.getId(), Integer.toString(initVal));  // C1
+            }
+        }
+
+        /**
+         * C1: rewrite a value expression into the symbolic string the {@link SymbolicRfEncoder}
+         * consumes — every register identifier replaced by its {@code regSymbolic} definition
+         * (parenthesised), so the result contains only {@code R<readId>} variables, integer
+         * literals and QF_BV operators. A register with no definition (never loaded/assigned)
+         * folds to {@code 0}, matching {@code ExprEval}'s treatment of an unknown identifier,
+         * so the symbolic value of a constant store is identical to its folded constant.
+         */
+        private static String substituteSymbolic(String expr, Map<String, String> regSymbolic) {
+            if (expr == null) return "0";
+            StringBuilder out = new StringBuilder();
+            Matcher m = IDENT.matcher(expr);
+            int last = 0;
+            while (m.find()) {
+                out.append(expr, last, m.start());
+                String id = m.group();
+                String sym = regSymbolic.get(id);
+                out.append(sym != null ? "(" + sym + ")" : "0");
+                last = m.end();
+            }
+            out.append(expr.substring(last));
+            return out.toString();
+        }
+
+        /**
+         * AArch64 post-index writeback ({@code STR W0,[X1],#4}): the access itself used the
+         * base, but afterwards the base holds {@code x+imm}, which is not a modelled
+         * location. Unbind it so a later access through it fails explicitly in
+         * {@link #resolveLoc} instead of silently aliasing {@code x}.
+         */
+        private void writeBack(Insn in, Map<String, String> addrEnv) {
+            if (arch == Arch.ARM && in.locIsRegister() && armPostIndexed(in.raw())) {
+                addrEnv.put(in.loc(), null);
             }
         }
 
         private String resolveLoc(Insn in, Map<String, String> addrEnv, RawInstr ri) {
             if (!in.locIsRegister()) return in.loc();
             String bound = addrEnv.get(in.loc());
+            if (bound == null && addrEnv.containsKey(in.loc())) {
+                throw new ParseException(src, ri.line(),
+                        ParseException.Kind.UNSUPPORTED_INSTRUCTION,
+                        "base register '" + in.loc() + "' was post-index written back; its "
+                                + "new address is not a modelled location: " + ri.text());
+            }
             if (bound == null) {
                 throw new ParseException(src, ri.line(),
                         ParseException.Kind.UNSUPPORTED_INSTRUCTION,
@@ -714,13 +1062,21 @@ public final class LitmusParser {
          */
         private Map<ReadEvent, Boolean> referencedReads(String expr, Map<String, RegSrc> env) {
             Map<ReadEvent, Boolean> acc = new LinkedHashMap<>();
+            var trace = DEP_TRACE;                       // read the volatile once
             for (String reg : identifiers(expr)) {
                 RegSrc s = env.get(reg);
                 if (s == null) continue;
-                boolean useReal = dependsReally(expr, reg);
+                Verdict v = classify(expr, reg);
+                boolean useReal = v.real();
                 for (Map.Entry<ReadEvent, Boolean> e : s.reads().entrySet()) {
                     boolean sem = useReal && e.getValue();
                     acc.merge(e.getKey(), sem, Boolean::logicalOr);
+                }
+                if (trace != null) {
+                    List<Integer> ids = new ArrayList<>();
+                    for (ReadEvent r : s.reads().keySet()) ids.add(r.getId());
+                    trace.accept(new DepDecision(expr, reg, v.real(), v.pattern(), ids,
+                            curThreadId, curInstrIndex));
                 }
             }
             return acc;
@@ -740,19 +1096,186 @@ public final class LitmusParser {
 
         private static final Pattern EXISTS_REG = Pattern.compile(
                 "(\\d+)\\s*:\\s*([A-Za-z_]\\w*)\\s*=\\s*(-?\\d+|0x[0-9A-Fa-f]+)");
+        // A bare location constraint loc=val (the '(?<![:\w])' excludes the reg of N:reg=val).
+        private static final Pattern EXISTS_MEM = Pattern.compile(
+                "(?<![:\\w])([A-Za-z_]\\w*)\\s*=\\s*(-?\\d+|0x[0-9A-Fa-f]+)");
 
         private void wireReadsFrom() {
+            if (arch == Arch.ARM) {
+                Map<Integer, Integer> bound = armBindOutcome();
+                for (Event e : es.getEvents()) {
+                    if (!(e instanceof ReadEvent rd)) continue;
+                    Integer want = bound.get(rd.getId());
+                    if (want != null) existsReadValues.put(rd.getId(), want);
+                    es.addReadsFrom(rd, chooseWrite(rd.getVariable(), want == null ? 0 : want));
+                }
+                return;
+            }
             Map<String, Integer> required = new LinkedHashMap<>();
             Matcher m = EXISTS_REG.matcher(existsClause);
             while (m.find()) {
                 required.put(m.group(1) + ":" + m.group(2), parseIntLit(m.group(3)));
             }
+            // C1: memory-final constraints (bare loc=val for a real location).
+            Matcher mm = EXISTS_MEM.matcher(existsClause);
+            while (mm.find()) {
+                if (locations.contains(mm.group(1))) {
+                    existsMemFinal.put(mm.group(1), parseIntLit(mm.group(2)));
+                }
+            }
             for (Event e : es.getEvents()) {
                 if (!(e instanceof ReadEvent rd)) continue;
                 Integer want = requiredValueFor(rd, required);
+                // C1: record which reads the exists clause actually pins (want != null). Reads
+                // it does not name stay free under symbolic enumeration (unlike wired mode,
+                // which pins them to the initial write).
+                if (want != null) existsReadValues.put(rd.getId(), want);
                 WriteEvent target = chooseWrite(rd.getVariable(), want == null ? 0 : want);
                 es.addReadsFrom(rd, target);
             }
+        }
+
+        private static final Pattern ARM_OUTCOME_QUANT = Pattern.compile("(~\\s*exists|exists|forall)\\b");
+        private static final Pattern ARM_OUTCOME_LOCATIONS = Pattern.compile("locations\\s*\\[[^\\]]*\\]");
+        private static final Pattern ARM_OUTCOME_REG = Pattern.compile(
+                "(\\d+)\\s*:\\s*([A-Za-z_]\\w*)\\s*=\\s*(-?(?:0x[0-9A-Fa-f]+|\\d+))");
+        private static final Pattern ARM_OUTCOME_MEM = Pattern.compile(
+                "(\\[\\s*)?([A-Za-z_]\\w*)\\s*(\\])?\\s*=\\s*(-?(?:0x[0-9A-Fa-f]+|\\d+))");
+
+        /**
+         * AArch64 outcome binding. The exists clause must be a conjunction of register atoms
+         * {@code N:Rn=v} and memory atoms {@code x=v} / {@code [x]=v}; anything else
+         * (disjunction, negated atoms, fault / tag / page-table terms) is rejected rather than
+         * silently dropped. A register atom is resolved against the register's <em>final</em>
+         * value in thread N (not its last load), under the W/X identity of armCanonical:
+         * <ul>
+         *   <li>final value is exactly one read: that read is pinned to v — an X-named atom
+         *       only when the register's upper 32 bits are known zero, so X = v ⇔ the 32-bit
+         *       value = v for 0 ≤ v &lt; 2^32;</li>
+         *   <li>final value is a constant (initial value or computed from constants): checked
+         *       here; a satisfied atom needs no constraint, a violated one is rejected;</li>
+         *   <li>anything else (a computed function of reads, an address, an undefined name,
+         *       a width-sensitive X value) is rejected.</li>
+         * </ul>
+         * Returns read id → required 32-bit value. The quantifier is not interpreted here.
+         */
+        private Map<Integer, Integer> armBindOutcome() {
+            Map<Integer, Integer> bound = new LinkedHashMap<>();
+            // "locations [...]" only lists what herd prints; it constrains nothing. A "filter"
+            // restricts the executions considered, which is not modelled.
+            String c = ARM_OUTCOME_LOCATIONS.matcher(existsClause).replaceAll(" ").strip();
+            if (c.matches("(?s)filter\\b.*") || c.contains(" filter ")) {
+                throw armUnsupported(-1, "outcome: filter clause is not supported", existsClause);
+            }
+            if (c.isEmpty()) return bound;
+            Matcher q = ARM_OUTCOME_QUANT.matcher(c);
+            String body = q.lookingAt() ? c.substring(q.end()) : c;
+            if (body.contains("\\/")) throw armUnsupported(-1, "outcome: disjunction is not supported", c);
+            for (String raw : body.replace("(", " ").replace(")", " ").split("/\\\\")) {
+                String a = raw.strip();
+                if (a.isEmpty()) continue;
+                if (a.startsWith("~")) throw armUnsupported(-1, "outcome: negated atom is not supported", a);
+                Matcher r = ARM_OUTCOME_REG.matcher(a);
+                if (r.matches()) {
+                    armBindRegisterAtom(Integer.parseInt(r.group(1)), r.group(2), parseLongLit(r.group(3)), a, bound);
+                    continue;
+                }
+                Matcher m = ARM_OUTCOME_MEM.matcher(a);
+                if (m.matches() && (m.group(1) == null) == (m.group(3) == null)) {
+                    String loc = m.group(2);
+                    long v = parseLongLit(m.group(4));
+                    if (armUnsupportedInitLocs.contains(loc)) {
+                        throw armUnsupported(-1, "outcome: location '" + loc + "' has an unmodelled initial value", a);
+                    }
+                    if (v < Integer.MIN_VALUE || v > 0xffffffffL) {
+                        throw armUnsupported(-1, "outcome: memory value outside 32 bits", a);
+                    }
+                    if (locations.contains(loc)) {
+                        existsMemFinal.put(loc, (int) v);
+                    } else if (initValues.getOrDefault(loc, 0) != (int) v) {
+                        throw armUnsupported(-1, "outcome: statically unsatisfiable (location '" + loc
+                                + "' is never accessed and holds its initial value)", a);
+                    }
+                    continue;
+                }
+                throw armUnsupported(-1, "outcome: unsupported term", a);
+            }
+            return bound;
+        }
+
+        private void armBindRegisterAtom(int p, String name, long v, String atom, Map<Integer, Integer> bound) {
+            String canon = armCanonical(name);
+            boolean xView = name.matches("[Xx]\\d+|[Xx][Zz][Rr]");
+            if (canon == null) canon = name;                       // AArch32 Rn etc.: 32-bit names
+            if (canon.equals("XZR")) {
+                if (v != 0) throw armUnsupported(-1, "outcome: statically unsatisfiable (zero register)", atom);
+                return;
+            }
+            Map<String, String> fin = armFinalSymbolic.get(p);
+            if (fin == null) throw armUnsupported(-1, "outcome: names thread P" + p + ", which does not exist", atom);
+            String sym = fin.get(canon);
+            if (sym == null) {
+                if (armUnsupportedInitRegs.getOrDefault(p, Set.of()).contains(canon)) {
+                    throw armUnsupported(-1, "outcome: register's initial value is not modelled", atom);
+                }
+                if (armFinalAddr.getOrDefault(p, Set.of()).contains(canon)) {
+                    throw armUnsupported(-1, "outcome: register holds an address", atom);
+                }
+                throw armUnsupported(-1, "outcome: register is never initialised or written", atom);
+            }
+            if (xView && !armFinalUpperZero.get(p).getOrDefault(canon, true)) {
+                throw armUnsupported(-1, "outcome: X register whose upper 32 bits are not known to be "
+                        + "zero (64-bit value not representable)", atom);
+            }
+            // Upper bits are zero from here on for X names, so X = v ⇔ 0 ≤ v < 2^32 ∧ low32 = v.
+            if (xView ? (v < 0 || v > 0xffffffffL) : (v < Integer.MIN_VALUE || v > 0xffffffffL)) {
+                throw armUnsupported(-1, xView
+                        ? "outcome: statically unsatisfiable (an X register holding a zero-extended "
+                          + "32-bit value cannot equal " + v + ")"
+                        : "outcome: value outside 32 bits", atom);
+            }
+            int want = (int) v;
+            String core = stripOuterParens(sym.replaceAll("\\s+", ""));
+            if (core.matches("R\\d+")) {
+                int rid = Integer.parseInt(core.substring(1));
+                Integer prev = bound.putIfAbsent(rid, want);
+                if (prev != null && prev != want) {
+                    throw armUnsupported(-1, "outcome: contradictory constraints on one loaded value", atom);
+                }
+                return;
+            }
+            if (!IDENT.matcher(core).find()) {
+                Integer k = tryEval(core, Map.of());
+                if (k == null) throw armUnsupported(-1, "outcome: constant register value not evaluable", atom);
+                if (k != want) {
+                    throw armUnsupported(-1, "outcome: statically unsatisfiable (register holds the constant "
+                            + k + ")", atom);
+                }
+                return;                                            // statically satisfied
+            }
+            throw armUnsupported(-1, "outcome: register holds a computed value (" + sym
+                    + "); only a loaded value or a constant can be bound", atom);
+        }
+
+        private static String stripOuterParens(String s) {
+            while (s.startsWith("(") && s.endsWith(")")) {
+                int depth = 0;
+                boolean wraps = true;
+                for (int i = 0; i < s.length() - 1; i++) {
+                    if (s.charAt(i) == '(') depth++;
+                    else if (s.charAt(i) == ')' && --depth == 0) { wraps = false; break; }
+                }
+                if (!wraps) break;
+                s = s.substring(1, s.length() - 1);
+            }
+            return s;
+        }
+
+        /** An outcome constant as a 64-bit value; a wider literal is rejected explicitly. */
+        private long parseLongLit(String s) {
+            Long v = armLiteral(s);
+            if (v == null) throw armUnsupported(-1, "outcome: constant wider than 64 bits", s);
+            return v;
         }
 
         /** The exists-required value for a read, found by its (thread, register) key. */
@@ -822,6 +1345,16 @@ public final class LitmusParser {
 
         private static final Pattern C_WRITE_ONCE = Pattern.compile(
                 "(?i)WRITE_ONCE\\s*\\(\\s*\\*?\\s*(\\w+)\\s*,\\s*([^)]+)\\)");
+        // Memory-order-annotated WRITE_ONCE / READ_ONCE macros (release/acquire fragment,
+        // TACAS M1): WRITE_ONCE_REL(*x,e) / WRITE_ONCE_RELACQ(*x,e) / WRITE_ONCE_ACQ_REL(*x,e)
+        // and r = READ_ONCE_ACQ(*x) / READ_ONCE_REL(*x) / READ_ONCE_RELACQ(*x). The suffix
+        // maps to the access's MemoryOrder; these are matched before the bare macros above.
+        // (Mutually exclusive with them anyway: the bare pattern requires '(' right after
+        // the macro name, which the suffixed spellings never have.)
+        private static final Pattern C_WRITE_ONCE_ORD = Pattern.compile(
+                "(?i)WRITE_ONCE_(REL|ACQ|RELACQ|ACQ_REL)\\s*\\(\\s*\\*?\\s*(\\w+)\\s*,\\s*([^)]+)\\)");
+        private static final Pattern C_READ_ONCE_ORD = Pattern.compile(
+                "(?i)(\\w+)\\s*=\\s*READ_ONCE_(ACQ|REL|RELACQ|ACQ_REL)\\s*\\(\\s*\\*?\\s*(\\w+)\\s*\\)");
         private static final Pattern C_STORE_REL = Pattern.compile(
                 "(?i)smp_store_release\\s*\\(\\s*&?\\s*(\\w+)\\s*,\\s*([^)]+)\\)");
         private static final Pattern C_ATOMIC_STORE = Pattern.compile(
@@ -847,6 +1380,12 @@ public final class LitmusParser {
 
         private Insn lexC(String t, RawInstr ri) {
             Matcher m;
+            if ((m = C_WRITE_ONCE_ORD.matcher(t)).find()) {
+                return store(m.group(2), m.group(3), moFromSuffix(m.group(1)), t);
+            }
+            if ((m = C_READ_ONCE_ORD.matcher(t)).find()) {
+                return load(m.group(1), m.group(3), moFromSuffix(m.group(2)), t);
+            }
             if ((m = C_WRITE_ONCE.matcher(t)).find()) {
                 return store(m.group(1), m.group(2), MemoryOrder.RELAXED, t);
             }
@@ -961,7 +1500,136 @@ public final class LitmusParser {
         }
 
         private Insn lexARM(String t, RawInstr ri) {
-            return lexRegisterAsm(t, ARM_LEX);
+            int p = curThreadId - 1;
+            if (p != armWidthThread) armEnterThread(p);
+            if (ARM_SP.matcher(t).find()) {
+                throw armUnsupported(ri.line(), "stack pointer SP/WSP is not modelled", t);
+            }
+            String[] head = t.split("[\\s,]+", 2);
+            String op = head[0].toLowerCase(Locale.ROOT);
+            List<String> ops = splitOperands(head.length > 1 ? head[1] : "");
+            Set<String> unsupported = armUnsupportedInitRegs.getOrDefault(p, Set.of());
+            Matcher g = ARM_GPR.matcher(t);
+            while (g.find()) {
+                if (unsupported.contains(armCanonical(g.group()))) {
+                    throw armUnsupported(ri.line(), "register " + g.group()
+                            + " has an initial value the model does not represent", t);
+                }
+            }
+            boolean zeroDest = armTrackWidths(op, ops, ri, t);
+            return lexRegisterAsm(armRewrite(t, zeroDest), ARM_LEX);
+        }
+
+        // ── AArch64 register identity and widths ───────────────────────────────────
+        //
+        // Wn and Xn are the 32- and 64-bit views of one register; every dataflow map is keyed
+        // by the canonical name Xn. The model's values are 32 bits wide, which is exact for
+        // the low 32 bits of every register under + - * & | ^ ~ and moves (truncation
+        // commutes with them), and for W views (a W write zero-extends). Where the full
+        // 64-bit X value is observed — a 64-bit store, or an X-named outcome — it is
+        // representable only if the upper 32 bits are known to be zero; that is tracked per
+        // register (armUpperZero) and anything else is rejected at the observation point.
+        // WZR/XZR read as 0 and discard writes; SP/WSP are not modelled.
+
+        private static final Pattern ARM_GPR = Pattern.compile("(?<![\\w.#])[WwXx](?:\\d{1,2}|[Zz][Rr])(?!\\w)");
+        private static final Pattern ARM_SP = Pattern.compile("(?<![\\w.#])[Ww]?[Ss][Pp](?!\\w)");
+
+        /** Canonical register for a W/X general-purpose register name ({@code W3}, {@code x3} → {@code X3}; {@code WZR} → {@code XZR}); {@code null} otherwise. */
+        static String armCanonical(String tok) {
+            String s = tok.strip();
+            if (s.matches("[WwXx]\\d{1,2}")) return "X" + Integer.parseInt(s.substring(1));
+            if (s.matches("[WwXx][Zz][Rr]")) return "XZR";
+            return null;
+        }
+
+        private void armEnterThread(int p) {
+            armWidthThread = p;
+            armUpperZero = new LinkedHashMap<>();
+            armInit64.getOrDefault(p, Map.of()).forEach((r, v64) -> armUpperZero.put(r, (v64 >>> 32) == 0));
+        }
+
+        /** Whether operand {@code o}, as read, has zero upper 32 bits. */
+        private boolean armUpperZeroOperand(String o) {
+            String s = o.strip();
+            if (s.startsWith("#") || isIntLit(s)) {
+                String d = hashImmediate(s.startsWith("#") ? s : "#" + s);
+                return d.matches("\\d+");                         // non-negative literal
+            }
+            String c = armCanonical(s);
+            if (c == null || c.equals("XZR") || s.matches("[Ww].*")) return true;
+            return armUpperZero.getOrDefault(c, true);             // never written: herd's 0
+        }
+
+        /**
+         * Update the width state for one instruction and reject 64-bit observations of values
+         * whose upper bits are unknown. Returns whether the destination is a zero register
+         * (its write is discarded).
+         */
+        private boolean armTrackWidths(String op, List<String> ops, RawInstr ri, String t) {
+            if (ops.isEmpty()) return false;
+            String first = ops.get(0).strip();
+            String dest = armCanonical(first);
+            boolean wDest = first.matches("[Ww].*");
+            if (ARM_LEX.isStore(op)) {
+                if (first.matches("[Xx]\\d{1,2}") && !armUpperZeroOperand(first)) {
+                    throw armUnsupported(ri.line(), "64-bit store of " + first
+                            + ", whose upper 32 bits are not known to be zero", t);
+                }
+                return false;
+            }
+            if (dest == null) return false;                          // B0/H0 SIMD, R0, labels …
+            boolean zero = dest.equals("XZR");
+            boolean uz;
+            if (ARM_LEX.isLoad(op)) {
+                uz = true;
+                if (!wDest) {                                        // 64-bit load
+                    MemRef ref = ARM_LEX.memRef(ops);
+                    String base = ref == null ? null : armCanonical(ref.base());
+                    String loc = base == null ? null
+                            : regAddrInit.getOrDefault(armWidthThread, Map.of()).get(base);
+                    if (loc != null) uz = initValues.getOrDefault(loc, 0) >= 0;
+                }
+            } else if (ARM_LEX.isRmw(op)) {
+                uz = true;                                           // constant placeholder
+            } else if (ARM_LEX.isLoadImm(op)) {
+                uz = wDest || (ops.size() >= 2 && armUpperZeroOperand(ops.get(1)));
+            } else if (ARM_LEX.isArith(op)) {
+                if (wDest) {
+                    uz = true;
+                } else {
+                    List<Boolean> src = new ArrayList<>();
+                    for (int i = 1; i < Math.min(ops.size(), 3); i++) src.add(armUpperZeroOperand(ops.get(i)));
+                    if (ops.size() > 3 && ops.get(3).strip().matches("(?i)sxt[wx]")) src.set(src.size() - 1, false);
+                    uz = switch (op) {
+                        case "and" -> src.contains(true);
+                        case "orr", "eor" -> !src.contains(false);
+                        default -> false;                            // add / sub / mvn: carries
+                    };
+                }
+            } else {
+                return false;                                        // cmp, branches, fences …
+            }
+            if (!zero) armUpperZero.put(dest, uz);
+            return zero;
+        }
+
+        /**
+         * Rewrite register tokens to canonical names. Zero-register reads become the literal
+         * {@code 0}; a zero-register destination becomes a name nothing reads, so the write
+         * is discarded.
+         */
+        private static String armRewrite(String t, boolean zeroDest) {
+            Matcher m = ARM_GPR.matcher(t);
+            StringBuilder out = new StringBuilder();
+            boolean first = true;
+            while (m.find()) {
+                String c = armCanonical(m.group());
+                String rep = c.equals("XZR") ? (first && zeroDest ? "XZR_DISCARD" : "0") : c;
+                m.appendReplacement(out, rep);
+                first = false;
+            }
+            m.appendTail(out);
+            return out.toString();
         }
 
         private Insn lexRISCV(String t, RawInstr ri) {
@@ -977,6 +1645,14 @@ public final class LitmusParser {
                 return new Insn(IKind.FENCE, null, null, false, null, null, MemoryOrder.SC, t);
             }
             MemoryOrder mo = lex.orderOf(op);
+            // AArch64 immediate addressing the location model cannot represent: a non-zero
+            // offset ([Xn,#8] addresses x+8, not x) or pre-index writeback ([Xn,#8]!).
+            // Reject rather than silently resolve the access to the base variable.
+            // (Post-index [Xn],#8 accesses x itself; see writeBack.)
+            if (lex == ARM_LEX && (lex.isLoad(op) || lex.isStore(op) || lex.isRmw(op))
+                    && armUnmodelledAddressing(ops)) {
+                return null;
+            }
             if (lex.isLoadImm(op) && ops.size() >= 2) {                // li/mov reg, #imm
                 String dst = ops.get(0);
                 String v = stripImm(ops.get(1));
@@ -999,10 +1675,18 @@ public final class LitmusParser {
                 return new Insn(IKind.RMW, ops.get(0), ref.base, true, null, null, mo, t);
             }
             if (lex.isArith(op) && ops.size() >= 2) {                  // add/xor/… reg, a, b
+                // AArch64 shifted / extended operand (EOR W1,W0,W0,LSL #2; ADD W0,W0,#1,LSL 12;
+                // ADD X0,X1,W2,UXTB): the value is not op(a, b), so reject rather than drop
+                // the modifier. Only the word extends SXTW/UXTW/SXTX/UXTX without an amount
+                // are kept: they are the identity on the 32-bit values the model tracks.
+                if (lex == ARM_LEX && ops.size() > 3 && (ops.size() > 4
+                        || !ops.get(3).strip().matches("(?i)[su]xt[wx]"))) {
+                    return null;
+                }
                 String dst = ops.get(0);
                 String expr = ops.size() >= 3
-                        ? ops.get(1) + opSym(op) + ops.get(2)
-                        : dst + opSym(op) + ops.get(1);
+                        ? hashImmediate(ops.get(1)) + opSym(op) + hashImmediate(ops.get(2))
+                        : dst + opSym(op) + hashImmediate(ops.get(1));
                 return new Insn(IKind.ASSIGN, dst, null, false, null, expr, null, t);
             }
             if (lex.isBranch(op)) {
@@ -1036,13 +1720,31 @@ public final class LitmusParser {
             return new Insn(IKind.RMW, reg, loc, false, null, null, MemoryOrder.SC, raw);
         }
 
+        /**
+         * Split an operand list on top-level commas only. Commas inside a bracketed
+         * address expression — AArch64 indexed forms like {@code [X5,W4,SXTW]} or
+         * {@code [X5,#8]}, and the parenthesised {@code disp(rB)} of PPC/RISC-V — are
+         * <em>not</em> separators: the whole {@code [...]} / {@code (...)} stays one
+         * operand so {@link AsmLexicon#memRef} can still see the index register. Splitting
+         * on every comma (the old behaviour) severed {@code [X5} from {@code W4,SXTW]},
+         * dropping the index register and every address dependency it carried.
+         */
         private static List<String> splitOperands(String rest) {
             List<String> out = new ArrayList<>();
             if (rest == null || rest.isBlank()) return out;
-            for (String o : rest.split(",")) {
-                String s = o.strip();
-                if (!s.isEmpty()) out.add(s);
+            int depth = 0, start = 0;
+            for (int i = 0; i < rest.length(); i++) {
+                char c = rest.charAt(i);
+                if (c == '[' || c == '(') depth++;
+                else if (c == ']' || c == ')') { if (depth > 0) depth--; }
+                else if (c == ',' && depth == 0) {
+                    String s = rest.substring(start, i).strip();
+                    if (!s.isEmpty()) out.add(s);
+                    start = i + 1;
+                }
             }
+            String s = rest.substring(start).strip();
+            if (!s.isEmpty()) out.add(s);
             return out;
         }
 
@@ -1068,6 +1770,66 @@ public final class LitmusParser {
             return op.startsWith("$") || op.startsWith("#") || isIntLit(op);
         }
 
+        /**
+         * An AArch64 {@code #}-immediate operand as a decimal literal of the expression
+         * grammar ({@code #1} ⇒ {@code 1}, {@code #0x10} ⇒ {@code 16}, {@code #-1} ⇒
+         * {@code (-1)}), wrapped to 32 bits like every other value; any other operand is
+         * returned unchanged, so dialects without {@code #} immediates lower exactly as
+         * before. Unparseable immediates are left as-is (outside the grammar, hence
+         * classified conservatively).
+         */
+        private static String hashImmediate(String op) {
+            String s = op.strip();
+            if (!s.startsWith("#")) return op;
+            String t = s.substring(1).strip();
+            boolean neg = t.startsWith("-");
+            if (neg || t.startsWith("+")) t = t.substring(1);
+            long v;
+            try {
+                v = (t.startsWith("0x") || t.startsWith("0X"))
+                        ? Long.parseLong(t.substring(2), 16) : Long.parseLong(t);
+            } catch (NumberFormatException e) {
+                return op;
+            }
+            int w = (int) (neg ? -v : v);
+            return w < 0 ? "(" + w + ")" : Integer.toString(w);
+        }
+
+        /**
+         * Whether an AArch64 load/store operand list uses addressing the location model
+         * cannot represent: a base-plus-immediate offset other than {@code #0}
+         * ({@code [X1,#4]}) or pre-index writeback ({@code [X1,#4]!}), both of which access
+         * {@code x+imm}. Post-index writeback ({@code [X1],#4}) accesses the base itself and
+         * is handled by {@link #armPostIndexed} instead. Register-index forms
+         * ({@code [X5,W4,SXTW]}, with or without a shift amount) are unaffected: they keep
+         * their existing address-dependency treatment.
+         */
+        private static boolean armUnmodelledAddressing(List<String> ops) {
+            for (int i = 1; i < ops.size(); i++) {
+                String o = ops.get(i);
+                int l = o.indexOf('['), r = o.indexOf(']');
+                if (l < 0 || r < l) continue;
+                if (o.substring(r + 1).contains("!")) return true;
+                String[] parts = o.substring(l + 1, r).split(",");
+                if (parts.length == 2) {
+                    String off = hashImmediate(parts[1]);
+                    if (parts[1].strip().startsWith("#") && !off.equals("0")) return true;
+                }
+                return false;
+            }
+            return false;
+        }
+
+        /** Whether an AArch64 access is post-indexed ({@code LDR W0,[X1],#4}): base written back after the access. */
+        private static boolean armPostIndexed(String raw) {
+            String[] head = raw.strip().split("[\\s,]+", 2);
+            List<String> ops = splitOperands(head.length > 1 ? head[1] : "");
+            for (int i = 1; i + 1 < ops.size(); i++) {
+                if (ops.get(i).contains("[") && ops.get(i + 1).strip().startsWith("#")) return true;
+            }
+            return false;
+        }
+
         private static String stripImm(String op) {
             String s = op.strip();
             if (s.startsWith("$") || s.startsWith("#")) s = s.substring(1);
@@ -1090,6 +1852,21 @@ public final class LitmusParser {
         }
 
         // ── Memory-order tokens ─────────────────────────────────────────────────────
+
+        /**
+         * Map a {@code READ_ONCE_*} / {@code WRITE_ONCE_*} macro suffix to a
+         * {@link MemoryOrder}: {@code ACQ}→acquire, {@code REL}→release, and the combined
+         * {@code RELACQ}/{@code ACQ_REL} (a release-and-acquire access) to {@code SC}, the
+         * strongest order we model — {@link MemoryOrder} has no dedicated {@code ACQ_REL},
+         * and SC is the sound over-approximation for a full-barrier access.
+         */
+        private static MemoryOrder moFromSuffix(String suffix) {
+            return switch (suffix.toUpperCase(Locale.ROOT)) {
+                case "ACQ" -> MemoryOrder.ACQUIRE;
+                case "REL" -> MemoryOrder.RELEASE;
+                default -> MemoryOrder.SC;      // RELACQ / ACQ_REL
+            };
+        }
 
         private static MemoryOrder moFromToken(String tok) {
             String s = tok.toLowerCase(Locale.ROOT);
@@ -1117,32 +1894,236 @@ public final class LitmusParser {
          * varies with {@code reg}. Self-cancelling identity idioms ({@code r^r}, {@code
          * r-r}, {@code r&~r}, {@code r|~r}, {@code r*0}, {@code r&0}) are folded to
          * constants first; if {@code reg} no longer appears, the dependency is fake.
+         *
+         * <p>A second, complementary canceller handles idioms the adjacency-based pattern
+         * folder misses: <em>linear-arithmetic</em> forms where {@code reg}'s occurrences
+         * cancel across intervening terms, e.g. the {@code a+1-a} store value of the
+         * Leaky-Semicolon LBfd test (Jeffrey et al., "The Leaky Semicolon", POPL 2022).
+         * Adjacency folding cannot see {@code a-a} in {@code a+1-a}; the linear pass
+         * computes {@code reg}'s net coefficient over {@code + -} and calls the dependency
+         * fake iff that coefficient is exactly zero — a value that is provably invariant
+         * in {@code reg} over the integers (the cancellation is symbolic and holds under
+         * two's-complement wraparound too). It is <em>sound in the soundness-critical
+         * direction</em>: it only ever demotes an edge to fake on a proof of invariance and
+         * bails (leaving the edge semantic) on anything non-linear, so no genuinely
+         * value-carrying dependency is dropped — {@code sdep_true ⊆ sdep_impl} is preserved.
          */
         private static boolean dependsReally(String expr, String reg) {
+            return classify(expr, reg).real();
+        }
+
+        /**
+         * The detector's verdict for one {@code (expr, reg)} use: whether {@code reg} is a
+         * <em>real</em> dependency, plus the idiom {@code pattern} the verdict rests on.
+         * {@code "REAL"} when nothing cancels; otherwise the specific cancellation
+         * ({@code "r^r"}, {@code "r&0"}, {@code "LINEAR_CANCEL"}, a {@code +}-joined
+         * combination, …). Pure classification split out from {@link #dependsReally} so the
+         * detector-quality instrumentation can name the matched pattern; the boolean result
+         * is identical to the pre-split logic.
+         */
+        private record Verdict(boolean real, String pattern) { }
+
+        private static Verdict classify(String expr, String reg) {
             String e = expr.replaceAll("\\s+", "");
             String R = Pattern.quote(reg);
             String[] toZero = {
                     R + "\\^" + R, R + "-" + R, R + "&~" + R, "~" + R + "&" + R,
                     R + "\\*0", "0\\*" + R, R + "&0", "0&" + R
             };
+            String[] toZeroName = { "r^r", "r-r", "r&~r", "~r&r", "r*0", "0*r", "r&0", "0&r" };
+            // Precedence of each idiom's TOP-LEVEL operator, used by foldSubterms to check
+            // that a textual match is really a sub-term. Order matches toZero/toOnes.
+            int[] toZeroPrec = { PREC_XOR, PREC_ADD, PREC_AND, PREC_AND,
+                                 PREC_MUL, PREC_MUL, PREC_AND, PREC_AND };
             String[] toOnes = { R + "\\|~" + R, "~" + R + "\\|" + R };
+            String[] toOnesName = { "r|~r", "~r|r" };
+            int[] toOnesPrec = { PREC_OR, PREC_OR };
+            LinkedHashSet<String> fired = new LinkedHashSet<>();
             boolean changed = true;
             while (changed) {
                 changed = false;
-                for (String z : toZero) {
-                    String n = e.replaceAll(bounded(z), "0");
-                    if (!n.equals(e)) { e = n; changed = true; }
+                for (int i = 0; i < toZero.length; i++) {
+                    String n = foldSubterms(e, bounded(toZero[i]), "0", toZeroPrec[i]);
+                    if (!n.equals(e)) { e = n; changed = true; fired.add(toZeroName[i]); }
                 }
-                for (String a : toOnes) {
-                    String n = e.replaceAll(bounded(a), "1");
-                    if (!n.equals(e)) { e = n; changed = true; }
+                for (int i = 0; i < toOnes.length; i++) {
+                    String n = foldSubterms(e, bounded(toOnes[i]), "1", toOnesPrec[i]);
+                    if (!n.equals(e)) { e = n; changed = true; fired.add(toOnesName[i]); }
                 }
             }
-            return Pattern.compile("(?<![A-Za-z0-9_])" + R + "(?![A-Za-z0-9_])").matcher(e).find();
+            boolean mentionsReg =
+                    Pattern.compile("(?<![A-Za-z0-9_])" + R + "(?![A-Za-z0-9_])").matcher(e).find();
+            if (!mentionsReg) {
+                return new Verdict(false, fired.isEmpty() ? "ABSENT" : String.join("+", fired));
+            }
+            // Primary path: the exact QF_BV constancy oracle, when one is installed. It
+            // subsumes the linear-cancellation heuristic below (it also proves non-linear
+            // invariance), so sdep_impl = sdep_true on the modelled bitvector fragment.
+            ConstancyOracle oracle = CONSTANCY_ORACLE;
+            if (oracle != null) {
+                Boolean constant = oracle.isConstant(expr, reg);
+                if (constant == null) {                       // outside the grammar: conservative
+                    fired.add("CONSERVATIVE");
+                    return new Verdict(true, String.join("+", fired));
+                }
+                if (constant) {                               // provably invariant ⇒ fake
+                    fired.add("QFBV_CONST");
+                    return new Verdict(false, String.join("+", fired));
+                }
+                fired.add("QFBV_VARIES");                     // provably varies ⇒ real
+                return new Verdict(true, String.join("+", fired));
+            }
+            // Solver-free fallback (no oracle installed): linear-arithmetic normalization on
+            // the idiom-folded expression — a net zero coefficient for reg proves invariance.
+            Integer coeff = linearCoefficient(e, reg);
+            if (coeff != null && coeff == 0) {
+                fired.add("LINEAR_CANCEL");
+                return new Verdict(false, String.join("+", fired));
+            }
+            return new Verdict(true, fired.isEmpty() ? "REAL" : String.join("+", fired) + "+REAL");
+        }
+
+        /**
+         * The net coefficient of {@code reg} when {@code e} (whitespace-free) is a flat
+         * sum/difference of integer literals and bare register identifiers — {@code a+1-a}
+         * ⇒ 0, {@code a+a-1} ⇒ 2, {@code r0+r1-r0} ⇒ 0 (for {@code reg=r0}). Returns
+         * {@code null} when {@code e} is <em>not</em> such a purely additive form: any
+         * {@code * ^ & | ~ ( )}, or an identifier abutting more text, makes the expression
+         * non-linear and the caller must then treat {@code reg} conservatively as real. A
+         * returned {@code 0} is therefore a proof of invariance, never a guess.
+         */
+        private static Integer linearCoefficient(String e, String reg) {
+            int coeff = 0;
+            int sign = 1;
+            boolean expectTerm = true;         // at a position where a term may begin
+            int i = 0, n = e.length();
+            while (i < n) {
+                char c = e.charAt(i);
+                if (c == '+' || c == '-') {
+                    if (expectTerm) {          // unary sign on the upcoming term
+                        if (c == '-') sign = -sign;
+                    } else {                    // binary additive operator between terms
+                        sign = (c == '-') ? -1 : 1;
+                        expectTerm = true;
+                    }
+                    i++;
+                    continue;
+                }
+                if (!expectTerm) return null;   // two adjacent terms, no operator ⇒ non-linear
+                if (Character.isLetter(c) || c == '_') {          // identifier term
+                    int start = i;
+                    while (i < n && (Character.isLetterOrDigit(e.charAt(i)) || e.charAt(i) == '_')) i++;
+                    if (e.substring(start, i).equals(reg)) coeff += sign;
+                    expectTerm = false;
+                    sign = 1;
+                    continue;
+                }
+                if (Character.isDigit(c)) {                        // integer literal term
+                    if (c == '0' && i + 1 < n && (e.charAt(i + 1) == 'x' || e.charAt(i + 1) == 'X')) {
+                        i += 2;
+                        while (i < n && isHexDigit(e.charAt(i))) i++;
+                    } else {
+                        while (i < n && Character.isDigit(e.charAt(i))) i++;
+                    }
+                    expectTerm = false;
+                    sign = 1;
+                    continue;
+                }
+                return null;                    // * ^ & | ~ ( ) … ⇒ not a flat additive form
+            }
+            return expectTerm ? null : coeff;   // trailing operator ⇒ malformed
+        }
+
+        private static boolean isHexDigit(char c) {
+            return Character.isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         }
 
         private static String bounded(String p) {
             return "(?<![A-Za-z0-9_])(?:" + p + ")(?![A-Za-z0-9_])";
+        }
+
+        // ── Precedence-aware idiom folding ───────────────────────────────────────────
+        //
+        // Operator precedence of the modelled QF_BV grammar, low → high:
+        //     |   ^   &   + -   *   unary ~ -
+        // (identical to QfbvConstancyOracle's recursive-descent parser).
+
+        private static final int PREC_OR = 1, PREC_XOR = 2, PREC_AND = 3,
+                                 PREC_ADD = 4, PREC_MUL = 5, PREC_UNARY = 6;
+
+        private static int precOf(char c) {
+            return switch (c) {
+                case '|' -> PREC_OR;
+                case '^' -> PREC_XOR;
+                case '&' -> PREC_AND;
+                case '+', '-' -> PREC_ADD;
+                case '*' -> PREC_MUL;
+                case '~' -> PREC_UNARY;
+                default -> -1;
+            };
+        }
+
+        /**
+         * Replace every occurrence of {@code pattern} in {@code e} that is a genuine
+         * <em>sub-term</em> by {@code repl}, leaving occurrences that merely appear as
+         * substrings untouched.
+         *
+         * <p>The cancellation idioms ({@code r^r}, {@code r-r}, {@code r&~r}, …) are only
+         * value-preserving rewrites when the matched text is the complete operand structure
+         * the idiom describes. Matching on the raw string is not sufficient: {@code
+         * ~r0-r0} <em>contains</em> {@code r0-r0}, but parses as {@code (~r0)-r0 =
+         * -2*r0-1}, which is not constant. Folding it to {@code ~0} loses the register and
+         * the detector then reports a genuinely value-carrying dependency as fake — an
+         * <em>unsound</em> classification, since it removes an edge from {@code sdep}.
+         *
+         * <p>Given the precedence {@code p} of the idiom's top-level operator, a match at
+         * {@code [s,t)} is a sub-term exactly when neither neighbour steals an operand:
+         * <ul>
+         *   <li><b>left</b>: start-of-string, {@code '('}, or an operator binding
+         *       <em>strictly looser</em> than {@code p}. Equal precedence is rejected
+         *       because the grammar is left-associative — in {@code a^r0^r0} the parse is
+         *       {@code (a^r0)^r0}, so the trailing {@code r0^r0} is not a sub-term.</li>
+         *   <li><b>right</b>: end-of-string, {@code ')'}, or an operator binding
+         *       <em>no tighter</em> than {@code p}. Equal precedence is accepted here, for
+         *       the same left-associativity reason — in {@code r0^r0^1} the leading
+         *       {@code r0^r0} <em>is</em> the left child.</li>
+         * </ul>
+         *
+         * <p>The check is conservative: when in doubt the fold is skipped, leaving the
+         * register mentioned and the dependency classified semantic. Skipping a legitimate
+         * fold costs precision (a fake edge reported real); performing an illegitimate one
+         * costs soundness. Only the latter is unacceptable.
+         */
+        private static String foldSubterms(String e, String pattern, String repl, int p) {
+            Matcher m = Pattern.compile(pattern).matcher(e);
+            StringBuilder out = new StringBuilder();
+            int last = 0;
+            while (m.find()) {
+                if (!isSubterm(e, m.start(), m.end(), p)) continue;
+                out.append(e, last, m.start()).append(repl);
+                last = m.end();
+            }
+            if (last == 0) return e;
+            return out.append(e.substring(last)).toString();
+        }
+
+        /** Whether the match {@code e[s,t)} of an idiom with top precedence {@code p} is a sub-term. */
+        private static boolean isSubterm(String e, int s, int t, int p) {
+            if (s > 0) {
+                char l = e.charAt(s - 1);
+                if (l != '(') {
+                    int lp = precOf(l);
+                    if (lp < 0 || lp >= p) return false;   // binds at least as tightly
+                }
+            }
+            if (t < e.length()) {
+                char r = e.charAt(t);
+                if (r != ')') {
+                    int rp = precOf(r);
+                    if (rp < 0 || rp > p) return false;    // binds more tightly
+                }
+            }
+            return true;
         }
 
         // ── Constant evaluation (for write values; substitutes loads as 0) ────────────

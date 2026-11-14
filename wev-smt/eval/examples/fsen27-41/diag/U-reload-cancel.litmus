@@ -1,0 +1,17 @@
+C U-reload-cancel
+{ }
+
+P0(int *x, int *y) {
+  r0 = READ_ONCE(*y);
+  r1 = r0;
+  r0 = READ_ONCE(*y);
+  s = r1 - r1 + r0;
+  WRITE_ONCE(*x, s);
+}
+
+P1(int *x, int *y) {
+  r9 = READ_ONCE(*x);
+  WRITE_ONCE(*y, r9);
+}
+
+exists (0:r0=1 /\ 1:r9=1)

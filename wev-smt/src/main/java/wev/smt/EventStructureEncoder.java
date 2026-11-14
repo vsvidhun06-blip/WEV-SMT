@@ -7,6 +7,8 @@ import com.weakest.model.FenceEvent;
 import com.weakest.model.ReadEvent;
 import com.weakest.model.RMWEvent;
 import com.weakest.model.WriteEvent;
+import org.sosy_lab.java_smt.api.BitvectorFormula;
+import org.sosy_lab.java_smt.api.BitvectorFormulaManager;
 import org.sosy_lab.java_smt.api.BooleanFormula;
 import org.sosy_lab.java_smt.api.BooleanFormulaManager;
 import org.sosy_lab.java_smt.api.FormulaManager;
@@ -59,6 +61,16 @@ public final class EventStructureEncoder {
     private final Map<EventPair, BooleanFormula> addrDepVars = new LinkedHashMap<>();
     private final Map<EventPair, BooleanFormula> ctrlDepVars = new LinkedHashMap<>();
 
+    // ── C1 symbolic rf + value propagation (opt-in via enableSymbolic; inert otherwise) ──
+    private static final int VW = 32;                    // bitvector width, matches QfbvConstancyOracle
+    private boolean symbolic = false;
+    private BitvectorFormulaManager bv;                  // lazily set when symbolic enabled
+    private Map<Integer, String> writeValueExprs = Map.of();   // writeId -> symbolic value string
+    private Map<Integer, Integer> existsReadValues = Map.of(); // exists-pinned readId -> value
+    private Map<String, Integer> existsMemFinal = Map.of();    // memory-final loc -> value
+    private final Map<Event, BitvectorFormula> valReadVars = new LinkedHashMap<>();
+    private final Map<Event, BitvectorFormula> valWriteVars = new LinkedHashMap<>();
+
     /** Encode a dependency-free event structure (the common case). */
     public EventStructureEncoder(SolverContext ctx, EventStructure es) {
         this(ctx, es, DependencyInfo.empty());
@@ -107,6 +119,38 @@ public final class EventStructureEncoder {
             }
         }
     }
+
+    /**
+     * C1: switch this encoder to <b>symbolic rf + value-propagation</b> mode. Instead of
+     * pinning each read to a write whose <em>folded constant</em> value matches, it mints a
+     * fresh BV32 {@code val_read} per reader and {@code val_write} per write, defines each
+     * {@code val_write} as the real function of the reads it depends on (from
+     * {@code writeValueExprs}, over the shared {@link QfbvConstancyOracle} grammar), couples
+     * {@code rf(w,r) ⇒ val_read[r] = val_write[w]}, pins only the reads the {@code exists}
+     * clause names ({@code existsReadValues}), and lets {@code co} range freely. The verdict
+     * becomes program-level: UNSAT ⇒ FORBIDDEN over all rf/co/value fixpoints. Must be called
+     * before {@link #encodeWellFormedness()}; {@code AxiomaticConsistency} is unchanged (it
+     * consumes the same {@code rf}/{@code co} decision vars either way).
+     */
+    public void enableSymbolic(Map<Integer, String> writeValueExprs,
+                               Map<Integer, Integer> existsReadValues,
+                               Map<String, Integer> existsMemFinal) {
+        this.symbolic = true;
+        this.writeValueExprs = writeValueExprs;
+        this.existsReadValues = existsReadValues;
+        this.existsMemFinal = existsMemFinal;
+        this.bv = ctx.getFormulaManager().getBitvectorFormulaManager();
+        for (Event e : es.getEvents()) {
+            if (isReader(e)) {
+                valReadVars.put(e, bv.makeVariable(VW, "vr_e" + e.getId()));
+            }
+            if (e instanceof WriteEvent || e.getType() == EventType.INIT) {
+                valWriteVars.put(e, bv.makeVariable(VW, "vw_e" + e.getId()));
+            }
+        }
+    }
+
+    public boolean isSymbolic() { return symbolic; }
 
     public EventStructure getEventStructure() { return es; }
     /** The syntactic dependency sidecar; {@code DependencyInfo.empty()} if none. */
@@ -205,7 +249,14 @@ public final class EventStructureEncoder {
                 // re-impose the global rf ordering in their own acyclic layers (addRf).
                 // For an RMW the read side consumes its oldVal (readValueOf), not the
                 // value it writes.
-                cs.add(bmgr.implication(rf, bmgr.makeBoolean(w.getValue() == want)));
+                if (symbolic) {
+                    // C1: couple observed values symbolically instead of matching a folded
+                    // constant — rf(w,r) ⇒ val_read[r] = val_write[w].
+                    cs.add(bmgr.implication(rf,
+                            bv.equal(valReadVars.get(e), valWriteVars.get(w))));
+                } else {
+                    cs.add(bmgr.implication(rf, bmgr.makeBoolean(w.getValue() == want)));
+                }
             }
             if (choices.isEmpty()) {
                 cs.add(bmgr.makeBoolean(false));
@@ -227,9 +278,92 @@ public final class EventStructureEncoder {
                     imgr.lessThan(eventVars.get(a), eventVars.get(b))));
         }
 
-        cs.addAll(coConstraints());
+        if (symbolic) {
+            // co is left FREE (any total order per location, via the pos order) — do NOT pin
+            // it to the loader's single textual order; add symbolic value definitions + the
+            // exists pinning instead of the wired coherence order.
+            cs.addAll(symbolicValueConstraints());
+        } else {
+            cs.addAll(coConstraints());
+        }
 
         return bmgr.and(cs);
+    }
+
+    /**
+     * C1 symbolic-mode constraints (only when {@link #enableSymbolic} was called): each
+     * write's {@code val_write} equals the real function of the reads it depends on (built
+     * over the shared {@link QfbvConstancyOracle} BV grammar from {@code writeValueExprs},
+     * with {@code R<readId>} mapped to that read's {@code val_read}); and each read the
+     * {@code exists} clause names is pinned to the required value. Reads the clause does not
+     * name stay free. A write with no retained expression (e.g. a hand-built structure)
+     * falls back to its folded constant, so symbolic mode degrades gracefully to wired values.
+     */
+    private List<BooleanFormula> symbolicValueConstraints() {
+        List<BooleanFormula> cs = new ArrayList<>();
+        Map<String, BitvectorFormula> env = new LinkedHashMap<>();
+        for (Map.Entry<Event, BitvectorFormula> e : valReadVars.entrySet()) {
+            env.put("R" + e.getKey().getId(), e.getValue());
+        }
+        for (Map.Entry<Event, BitvectorFormula> e : valWriteVars.entrySet()) {
+            Event w = e.getKey();
+            String expr = writeValueExprs.get(w.getId());
+            BitvectorFormula def;
+            if (expr == null) {
+                def = bv.makeBitvector(VW, w.getValue());          // no expr: folded constant
+            } else {
+                try {
+                    def = QfbvConstancyOracle.buildTerm(expr, VW, bv, bmgr, env);
+                } catch (RuntimeException outsideGrammar) {
+                    // Value expression outside the modelled grammar: leave val_write
+                    // unconstrained (a fresh BV var) — a sound over-approximation that never
+                    // fabricates a value, so it can only ALLOW, never wrongly FORBID.
+                    def = e.getValue();
+                }
+            }
+            cs.add(bv.equal(e.getValue(), def));
+        }
+        for (Map.Entry<Integer, Integer> e : existsReadValues.entrySet()) {
+            Event r = es.getEventById(e.getKey());
+            BitvectorFormula vr = (r == null) ? null : valReadVars.get(r);
+            if (vr != null) cs.add(bv.equal(vr, bv.makeBitvector(VW, e.getValue())));
+        }
+
+        // co is free among program writes, but the INITIAL write of each location must stay
+        // co-minimal (it is the initial state — a program write can never be overwritten *by*
+        // the init). Without this, freeing co lets the init sit co-after a program write and a
+        // coherence violation (e.g. CoWR) escapes. pos(init) < pos(w) for every other write w.
+        for (String loc : collectLocations()) {
+            List<Event> ws = writesSharingLocation(loc);
+            Event init = null;
+            // The initial write is the one on thread 0 (the parser reserves thread 0 for
+            // inits); WriteEvent carries EventType.WRITE, not INIT, so match on the thread.
+            for (Event w : ws) if (w.getThreadId() == 0) { init = w; break; }
+            if (init == null) continue;
+            for (Event w : ws) {
+                if (w.getId() == init.getId()) continue;
+                cs.add(imgr.lessThan(eventVars.get(init), eventVars.get(w)));
+            }
+        }
+
+        // Memory-final constraints (loc=val): the co-maximal write of loc has value val.
+        // "w is co-maximal" = its position is the largest among loc's writes.
+        for (Map.Entry<String, Integer> e : existsMemFinal.entrySet()) {
+            List<Event> ws = writesSharingLocation(e.getKey());
+            for (Event w : ws) {
+                BitvectorFormula vw = valWriteVars.get(w);
+                if (vw == null) continue;
+                List<BooleanFormula> isMax = new ArrayList<>();
+                for (Event other : ws) {
+                    if (other.getId() == w.getId()) continue;
+                    isMax.add(imgr.lessThan(eventVars.get(other), eventVars.get(w)));
+                }
+                BooleanFormula coMax = isMax.isEmpty() ? bmgr.makeTrue() : bmgr.and(isMax);
+                cs.add(bmgr.implication(coMax,
+                        bv.equal(vw, bv.makeBitvector(VW, e.getValue()))));
+            }
+        }
+        return cs;
     }
 
     public BooleanFormula encodeRelation(String relName) {
@@ -276,18 +410,27 @@ public final class EventStructureEncoder {
     }
 
     /**
-     * Program-order constraints for the global execution order (Pass 2b-min), with
-     * <em>cross-location</em> store→store and store→load pairs dropped. Those pairs are
-     * not in preserved program order under PSO/RA/WEAKEST (Alglave et al., Herding Cats,
-     * TOPLAS 2014, §4.4: PSO relaxes W→W; TSO relaxes W→R), so forcing them into the
-     * single global {@code pos} order made well-formedness an SC-strength backstop that
-     * over-forbade S and 2+2W. Kept: all R→W / R→R pairs, and <em>same-location</em>
-     * W→W / W→R pairs. Same-location ordering is independently re-imposed by
-     * {@link AxiomaticConsistency#coherencePerLocation} (SC-per-location), and SC/TSO
-     * re-impose the cross-location W→W they need via their own consistency layers, so
-     * dropping these edges here does not weaken any model below its textbook strength.
-     * Unlike {@link #poConstraints()}, this is used only by well-formedness, never by
-     * relation extraction.
+     * Program-order constraints for the global witness order {@code pos}, restricted to
+     * <em>same-location</em> po edges (corrected v1, 2026-10-19).
+     *
+     * <p>{@code pos} is one strict total order over all events, and co is read off it, so
+     * any po edge kept here between events of <em>different</em> locations composes with
+     * other kept edges. In the submitted build, cross-location R→W / R→R edges were kept
+     * and only cross-location W→W / W→R edges were dropped; {@code W x; R x; W y} then
+     * re-imposed the dropped {@code W x < W y} through the intermediate read, and the
+     * co edges of 2+2W+rfi-shaped programs closed a {@code pos} cycle. That wrongly forbade
+     * 3 eligible corpus files under PSO, RA, WEAKEST and RC11, although no model axiom
+     * requires the order (see CORRECTION-NOTICE.md, finding F-01).
+     *
+     * <p>Every relaxation of program order belongs to the per-model consistency layers
+     * ({@link AxiomaticConsistency}), never to well-formedness. Same-location order is
+     * re-imposed by {@link AxiomaticConsistency#coherencePerLocation}, which every model
+     * conjoins, so the edges kept here are implied by it; they are retained only to keep
+     * the change minimal. With every constraint relating two events of one location, the
+     * well-formedness constraints split per location, and per-location orders on disjoint
+     * event sets always extend to one global order. Fences have no location and are
+     * skipped. Unlike {@link #poConstraints()}, this is used only by well-formedness, never
+     * by relation extraction.
      */
     private List<BooleanFormula> relaxedPoConstraints() {
         List<BooleanFormula> cs = new ArrayList<>();
@@ -306,10 +449,17 @@ public final class EventStructureEncoder {
                 // encoding (AxiomaticConsistency.addPo); here we simply skip fence edges.
                 if (a instanceof FenceEvent || b instanceof FenceEvent) continue;
                 if (droppedCrossLocation(a, b)) continue;
+                // Corrected v1: keep only same-location edges (see the Javadoc above).
+                if (!sameLocation(a, b)) continue;
                 cs.add(imgr.lessThan(posA, eventVars.get(b)));
             }
         }
         return cs;
+    }
+
+    /** Whether both events access the same (non-null) location; false for fences. */
+    static boolean sameLocation(Event a, Event b) {
+        return a.getVariable() != null && a.getVariable().equals(b.getVariable());
     }
 
     /** Whether {@code a→b} is a cross-location store→store or store→load po edge. */

@@ -1,0 +1,10 @@
+session WEV_SMT_Rev = WEV_SMT_PwT +
+  description \<open>FSEN 2027 revision: version-aware closure, exactness on single-read injective programs; ring-weighted closure (affine fragment); block summaries; Cousot ordered composition = vdep; fixed-initial-state bridge; cardinality, SRI and masking remarks.\<close>
+  options [document = false]
+  theories
+    PwT_Versioned
+    PwT_Affine
+    PwT_Block
+    PwT_Correspondence
+    PwT_Remarks
+    Rev_Check

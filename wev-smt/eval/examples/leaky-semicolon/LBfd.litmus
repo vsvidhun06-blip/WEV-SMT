@@ -1,0 +1,16 @@
+C LBfd
+(* Leaky Semicolon (Jeffrey et al., POPL 2022), LBfd: load-buffering with a FALSE   *)
+(* (linear-arithmetic) data dependency. Each store writes r+1-r, which equals the    *)
+(* constant 1 for every value of r, so the store value does not actually vary with   *)
+(* the load. PwT's semantic-dependency analysis sees no real dependency and ALLOWS   *)
+(* the r0=r1=1 outcome — the leaky-semicolon point that syntactic mention is not      *)
+(* semantic dependence.                                                              *)
+(*                                                                                  *)
+(* wev-smt: the linear-arithmetic normalization computes r's net coefficient         *)
+(* (1 - 1 = 0) and records both data edges isSemantic=false; evalConst(r+1-r)=1 so   *)
+(* the LB cycle r0=r1=1 is wired faithfully.                                          *)
+{ }
+ P0                            | P1                            ;
+ r0 = READ_ONCE(*x)            | r1 = READ_ONCE(*y)            ;
+ WRITE_ONCE(*y, r0 + 1 - r0)   | WRITE_ONCE(*x, r1 + 1 - r1)   ;
+exists (0:r0=1 /\ 1:r1=1)

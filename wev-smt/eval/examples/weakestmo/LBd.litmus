@@ -1,0 +1,12 @@
+C LBd
+(* Weakestmo (Chakraborty & Vafeiadis, POPL 2019), LB+data ("LBd"): a REAL data  *)
+(* dependency on BOTH threads — each store's value is a function (r+1) of the      *)
+(* value just loaded, so dependsReally classifies both data edges isSemantic=true. *)
+(* The r0=r1=1 outcome would be a value justified only by itself around the        *)
+(* dep u rf cycle — an out-of-thin-air read. Weakestmo FORBIDS it: the semantic    *)
+(* data dependencies land in sdep and jfCoherence sees a cycle in sdep u jf.       *)
+{ }
+ P0                        | P1                        ;
+ r0 = READ_ONCE(*x)        | r1 = READ_ONCE(*y)        ;
+ WRITE_ONCE(*y, r0 + 1)    | WRITE_ONCE(*x, r1 + 1)    ;
+exists (0:r0=1 /\ 1:r1=1)

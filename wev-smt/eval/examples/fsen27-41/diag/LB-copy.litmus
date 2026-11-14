@@ -1,0 +1,10 @@
+C LB-copy
+(* DIAGNOSTIC INPUT added 2026-10-18 by the correctness investigation; NOT original    *)
+(* evidence. Same shape as inputs/examples/paper/LB-real.litmus, but each store writes *)
+(* the loaded value itself (the program drawn in the paper's matched-pair figure:      *)
+(* "b: W x = r0", "d: W y = r1").                                                       *)
+{ }
+ P0                       | P1                       ;
+ r0 = READ_ONCE(*y)       | r1 = READ_ONCE(*x)       ;
+ WRITE_ONCE(*x, r0)       | WRITE_ONCE(*y, r1)       ;
+exists (0:r0=1 /\ 1:r1=1)

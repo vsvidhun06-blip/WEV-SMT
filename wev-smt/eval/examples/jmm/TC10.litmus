@@ -1,0 +1,10 @@
+C TC10
+(* JMM causality test case 10 (Pugh 2004). A three-thread data-dependency CHAIN that  *)
+(* closes into a cycle: z<-y (P0), x<-z (P1), y<-x (P2). The value 1 is justified only *)
+(* around the cycle -- out of thin air. JMM DECISION: FORBIDDEN. Each hop uses the r+1 *)
+(* idiom so every store carries a real semantic data dependency.                       *)
+{ }
+P0(int *y, int *z) { r0 = READ_ONCE(*y); WRITE_ONCE(*z, r0 + 1); }
+P1(int *x, int *z) { r0 = READ_ONCE(*z); WRITE_ONCE(*x, r0 + 1); }
+P2(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); }
+exists (0:r0=1 /\ 1:r0=1 /\ 2:r0=1)

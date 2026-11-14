@@ -1,0 +1,10 @@
+C TC11
+(* JMM causality test case 11 (Pugh 2004). Same data-dependency cycle as TC02 but the *)
+(* shared locations are INITIALISED to 1. Reading 1 is now justified by the initial    *)
+(* write, not by the cycle, so the outcome is NOT thin-air. JMM DECISION: ALLOWED.     *)
+(* Encoded with copy-form stores: the initial write of value 1 lets both reads wire to *)
+(* it faithfully, and the dependency cycle no longer needs to justify the value.       *)
+{ x=1; y=1; }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, r0); }
+P1(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0); }
+exists (0:r0=1 /\ 1:r0=1)

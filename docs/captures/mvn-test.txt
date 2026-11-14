@@ -1,0 +1,17 @@
+$ mvn -o test        (in wev-smt; F01CorpusRegressionTest excluded without -Dwev.packageRoot)
+Tests run: 11, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.AxiomaticConsistencyTest
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.bench.ParametricProgramsTest
+Tests run: 11, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.cli.CorpusValidationManifestTest
+Tests run: 11, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.edgecase.EdgeCaseTest
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.EventStructureEncoderTest
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.MinimalWitnessExtractorTest
+Tests run: 17, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.parse.ArmImmediateParsingTest
+Tests run: 20, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.parse.ArmRegisterBindingTest
+Tests run: 10, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.parse.ControlGuardParsingTest
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.parse.DetectorOracleAuditTest
+Tests run: 23, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.parse.LitmusParserTest
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.parse.PaperExampleTest
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.SmtSmokeTest
+Tests run: 12, Failures: 0, Errors: 0, Skipped: 0 -- in wev.smt.WellFormednessAdequacyTest
+Tests run: 135, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS

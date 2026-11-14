@@ -1,0 +1,14 @@
+C TC15
+(* JMM causality test case 15 (Pugh 2004). A four-thread data-dependency chain         *)
+(* x->y->z->x that is fed by an INDEPENDENT real source P0 writing x=1. The value 1     *)
+(* originates from a genuine unconditional write, not from the cycle, so it is not      *)
+(* thin-air. JMM DECISION: ALLOWED. Encoded as a copy chain from the real x=1 source.   *)
+(* Wiring note: copies past the first hop have no constant write to match, so reads     *)
+(* beyond the source default to the initial write -- the verdict reflects the absence   *)
+(* of a closed dependency-union-jf cycle rather than a fully-wired value chain.         *)
+{ }
+P0(int *x) { WRITE_ONCE(*x, 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0); }
+P2(int *y, int *z) { r0 = READ_ONCE(*y); WRITE_ONCE(*z, r0); }
+P3(int *x, int *z) { r0 = READ_ONCE(*z); WRITE_ONCE(*x, r0); }
+exists (1:r0=1 /\ 2:r0=1 /\ 3:r0=1)

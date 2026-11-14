@@ -1,0 +1,11 @@
+C LB
+(* Chakraborty & Vafeiadis, "Grounding Thin-Air Reads with Event Structures",   *)
+(* POPL 2019 (Weakestmo). Base load-buffering: both stores write the CONSTANT 1, *)
+(* so neither store depends on the prior load. With no dependency to preserve,    *)
+(* the store may be reordered before the load and the r0=r1=1 outcome is          *)
+(* observable. Weakestmo (and every relaxed hardware model) ALLOWS LB.            *)
+{ }
+ P0                    | P1                    ;
+ r0 = READ_ONCE(*x)    | r1 = READ_ONCE(*y)    ;
+ WRITE_ONCE(*y, 1)     | WRITE_ONCE(*x, 1)     ;
+exists (0:r0=1 /\ 1:r1=1)

@@ -1,0 +1,9 @@
+C CoWR
+(* Weakestmo (Chakraborty & Vafeiadis, POPL 2019): coherence write-read (CoWR).     *)
+(* A thread writes x=1 then reads x. Reading the initial value 0 after its own       *)
+(* program-order-earlier store (r0=0) would read from a coherence-earlier write than *)
+(* the one already in program order — an SC-per-location violation. Weakestmo        *)
+(* FORBIDS it.                                                                        *)
+{ }
+P0(int *x) { WRITE_ONCE(*x, 1); r0 = READ_ONCE(*x); }
+exists (0:r0=0)

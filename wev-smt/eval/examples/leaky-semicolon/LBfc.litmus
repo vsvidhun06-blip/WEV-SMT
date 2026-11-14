@@ -1,0 +1,20 @@
+C LBfc
+(* Leaky Semicolon (Jeffrey et al., POPL 2022), LBfc: load-buffering with a FALSE   *)
+(* control dependency — BOTH arms of the guard write the SAME value, so the store    *)
+(* happens with value 1 regardless of the loaded value. The branch is redundant and  *)
+(* a compiler may remove it; PwT recognises there is no semantic control dependency   *)
+(* and ALLOWS the r0=r1=1 outcome. Intended C source:                                *)
+(*                                                                                  *)
+(*   P0: r0 = READ_ONCE(*x); if (r0==1) WRITE_ONCE(*y,1) else WRITE_ONCE(*y,1)       *)
+(*   P1: r1 = READ_ONCE(*y); if (r1==1) WRITE_ONCE(*x,1) else WRITE_ONCE(*x,1)       *)
+(*                                                                                  *)
+(* wev-smt LIMITATION: the C parser has no brace/else handling, so both-arms-write   *)
+(* is flattened to the same event structure as the genuine LBcd — a branch-on-read   *)
+(* followed by an (always-taken) store — and read->store ctrl is recorded            *)
+(* isSemantic=true UNCONDITIONALLY. The detector cannot see that both arms write 1,   *)
+(* so under CURRENT this fake ctrl edge stays in sdep and wev-smt over-approximates   *)
+(* to FORBIDDEN. This is the paper's control-dependency limitation made concrete.    *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); if (r0 == 1) ; WRITE_ONCE(*y, 1); }
+P1(int *x, int *y) { r1 = READ_ONCE(*y); if (r1 == 1) ; WRITE_ONCE(*x, 1); }
+exists (0:r0=1 /\ 1:r1=1)

@@ -1,0 +1,10 @@
+C CoRR
+(* Weakestmo (Chakraborty & Vafeiadis, POPL 2019): coherence read-read (CoRR),      *)
+(* the SC-per-location shape. One writer stores x=1; a reader loads x twice. Reading *)
+(* the new value (r0=1) then the initial value (r1=0) would order the two reads      *)
+(* against coherence (co: init -> x=1). Every model — Weakestmo included — enforces  *)
+(* SC-per-location, so CoRR is FORBIDDEN.                                            *)
+{ }
+P0(int *x) { WRITE_ONCE(*x, 1); }
+P1(int *x) { r0 = READ_ONCE(*x); r1 = READ_ONCE(*x); }
+exists (1:r0=1 /\ 1:r1=0)

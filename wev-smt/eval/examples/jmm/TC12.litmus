@@ -1,0 +1,9 @@
+C TC12
+(* JMM causality test case 12 (Pugh 2004). Load-buffering with a data dependency on P1 *)
+(* PLUS an independent unconditional store y=1 on P1. The independent store supplies    *)
+(* the value 1 without the cycle, so the outcome is not thin-air. JMM DECISION:         *)
+(* ALLOWED. The independent y=1 gives the reader a non-dependent write to justify 1.    *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); WRITE_ONCE(*y, 1); }
+exists (0:r0=1 /\ 1:r0=1)

@@ -1,0 +1,15 @@
+$ isabelle build -c -v -o timeout=900 -d . WEV_SMT WEV_SMT_PwT WEV_SMT_Rev WEV_SMT_TL    (in wev-smt/isabelle, Isabelle2024)
+Building WEV_SMT ...
+Finished WEV_SMT (0:00:03 elapsed time)
+Building WEV_SMT_PwT ...
+Finished WEV_SMT_PwT (0:00:14 elapsed time)
+Building WEV_SMT_Rev ...
+Finished WEV_SMT_Rev (0:00:04 elapsed time)
+Running WEV_SMT_TL ...
+Finished WEV_SMT_TL (0:00:01 elapsed time)
+
+$ grep -E "ancestry|oracles over" rev/CHECK-RESULT.txt tl/CHECK-RESULT.txt tl/ANCESTRY-RESULT.txt
+rev/CHECK-RESULT.txt:ancestry: OK (no WEV_SMT_Defs/Detector/Soundness/PwT_Model ancestor)
+rev/CHECK-RESULT.txt:oracles over 73 theorems: none
+tl/CHECK-RESULT.txt:oracles over 31 theorems: none
+tl/ANCESTRY-RESULT.txt:ancestry: OK (no WEV_SMT_Defs/Detector/Soundness/PwT_Model ancestor)

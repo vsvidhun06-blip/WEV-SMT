@@ -1,0 +1,11 @@
+C TC13
+(* JMM causality test case 13 (Pugh 2004). Coherence constraint: P0 reads y twice and *)
+(* stores x; P1 and P2 write y=1 and y=2 independently. Coherence (co: init -> 1 -> 2) *)
+(* forbids P0 observing y=2 then y=1. JMM DECISION: FORBIDDEN for the coherence-        *)
+(* violating combination r0=2 then r1=1 (the constraint on the pair of reads). The     *)
+(* exists names exactly that co-violating pair; no dependency is involved.             *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*y); r1 = READ_ONCE(*y); WRITE_ONCE(*x, r0 + 1); }
+P1(int *y) { WRITE_ONCE(*y, 1); }
+P2(int *y) { WRITE_ONCE(*y, 2); }
+exists (0:r0=2 /\ 0:r1=1)

@@ -1,0 +1,10 @@
+C TC17
+(* JMM causality test case 17 (Pugh 2004). A data+control dependency cycle: P0 has a   *)
+(* data dep y<-x; P1 reads y and z and, guarded by if(r0==r1), stores x with a value   *)
+(* derived from y. Both a control and a data dependency lie on the cycle. JMM          *)
+(* DECISION: FORBIDDEN. The parser records the guard as ctrl isSemantic=true and the    *)
+(* r+1 stores as real data deps.                                                       *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); }
+P1(int *x, int *y, int *z) { r0 = READ_ONCE(*y); r1 = READ_ONCE(*z); if (r0 == r1) ; WRITE_ONCE(*x, r0 + 1); }
+exists (0:r0=1 /\ 1:r0=1)

@@ -1,0 +1,11 @@
+C LBd
+(* Leaky Semicolon (Jeffrey et al., POPL 2022), LBd: load-buffering with a REAL     *)
+(* data dependency on both threads (store value r+1 is a genuine function of the     *)
+(* load). The written 1 would be justified only by itself around the dependency u    *)
+(* reads-from cycle. PwT tracks the semantic dependency and FORBIDS the r0=r1=1       *)
+(* thin-air outcome.                                                                 *)
+{ }
+ P0                        | P1                        ;
+ r0 = READ_ONCE(*x)        | r1 = READ_ONCE(*y)        ;
+ WRITE_ONCE(*y, r0 + 1)    | WRITE_ONCE(*x, r1 + 1)    ;
+exists (0:r0=1 /\ 1:r1=1)

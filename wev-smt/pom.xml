@@ -83,6 +83,13 @@
                         <java.library.path>${native.dir}</java.library.path>
                     </systemPropertyVariables>
                     <argLine>-Djava.library.path=${native.dir}</argLine>
+                    <!-- F01CorpusRegressionTest reads frozen corpus files from the TACAS
+                         artifact and fails (by design) when they are absent. It is left
+                         out of a plain `mvn test`; the f01-artifact-regression profile
+                         below adds it back whenever -Dwev.packageRoot is given. -->
+                    <excludes>
+                        <exclude>**/F01CorpusRegressionTest.java</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
 
@@ -94,6 +101,7 @@
                      mvn -q exec:exec@scalability-fences   (Day-12 fence/RMW sweep)
                      mvn -q exec:exec@corpus-validation    (Day-11 corpus sweep; -Dcorpus.dir=<root>)
                      mvn -q exec:exec@robustness           (Day-14 edge-case robustness sweep, report in eval/)
+                     mvn -q exec:exec@ra-formal            (RA_FORMAL chain atlas, ra-formal-atlas.csv in eval/)
                  The <classpath/> token expands to the full runtime classpath. -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -188,12 +196,51 @@
                             </arguments>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>ra-formal</id>
+                        <configuration>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-Djava.library.path=${native.dir}</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>wev.smt.cli.RaFormalAtlasRun</argument>
+                                <argument>eval</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>
     </build>
 
     <profiles>
+        <!-- Runs F01CorpusRegressionTest against an extracted TACAS artifact:
+                 mvn test -Dwev.packageRoot=<path to tacas2027-4549-artifact-corrected-v1>
+             Activated by the property itself; the test then fails on any missing or
+             hash-mismatched input instead of being skipped. -->
+        <profile>
+            <id>f01-artifact-regression</id>
+            <activation>
+                <property>
+                    <name>wev.packageRoot</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <excludes combine.self="override"/>
+                            <systemPropertyVariables>
+                                <wev.packageRoot>${wev.packageRoot}</wev.packageRoot>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>z3-natives-windows-x64</id>
             <activation>

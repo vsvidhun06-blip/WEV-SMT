@@ -1,0 +1,10 @@
+session WEV_SMT_TL = WEV_SMT_Rev +
+  description \<open>Exactness of the version-aware closure on the taint-linear fragment
+    (generalises vdep_exact_sri), with one witness per necessary hypothesis (paper Thm. 5(e)).
+    PwT_TaintLinear and TL_Check are unchanged from the 2026-11-11 real-code investigation;
+    TL_Ancestry was added on 2026-11-12.\<close>
+  options [document = false]
+  theories
+    PwT_TaintLinear
+    TL_Check
+    TL_Ancestry

@@ -3,6 +3,7 @@ package wev.smt.parse;
 import com.weakest.model.Event;
 import com.weakest.model.EventStructure;
 import com.weakest.model.EventType;
+import com.weakest.model.MemoryOrder;
 import com.weakest.model.ReadEvent;
 import com.weakest.model.WriteEvent;
 import org.junit.jupiter.api.Test;
@@ -183,6 +184,165 @@ class LitmusParserTest {
         assertTrue(edge.isSemantic(), "edge is semantic");
     }
 
+    // ── Memory-order-annotated macros (release/acquire fragment, TACAS M1) ───────
+
+    /**
+     * {@code READ_ONCE_ACQ} / {@code WRITE_ONCE_REL} / {@code WRITE_ONCE_RELACQ} must
+     * lower to loads/stores carrying the annotated {@link MemoryOrder}: ACQ→acquire,
+     * REL→release, RELACQ→SC (the strongest order we model — there is no dedicated
+     * ACQ_REL). This is the MP-relacq shape, which the RA layer synchronises.
+     */
+    @Test
+    void memoryOrderMacrosSetAccessOrder() {
+        LitmusCase lc = LitmusParser.parse("""
+                C MP-RELACQ
+                { }
+                 P0                      | P1                       ;
+                 WRITE_ONCE(*d,1)        | r1 = READ_ONCE_ACQ(*f)   ;
+                 WRITE_ONCE_REL(*f,1)    | r2 = READ_ONCE(*d)       ;
+                exists (1:r1=1 /\\ 1:r2=0)
+                """, "mp-relacq.litmus");
+
+        assertSame(MemoryOrder.RELEASE, writeTo(lc.es(), "f").getMemoryOrder(),
+                "WRITE_ONCE_REL(*f,1) is a release store");
+        assertSame(MemoryOrder.ACQUIRE, readOf(lc.es(), "f").getMemoryOrder(),
+                "r1 = READ_ONCE_ACQ(*f) is an acquire load");
+        assertSame(MemoryOrder.RELAXED, writeTo(lc.es(), "d").getMemoryOrder(),
+                "the bare WRITE_ONCE(*d,1) stays relaxed");
+    }
+
+    @Test
+    void writeOnceRelacqMapsToSc() {
+        LitmusCase lc = LitmusParser.parse("""
+                C RELACQ
+                { }
+                 P0                       ;
+                 WRITE_ONCE_RELACQ(*x,1)  ;
+                exists (x=1)
+                """, "relacq.litmus");
+
+        assertSame(MemoryOrder.SC, writeTo(lc.es(), "x").getMemoryOrder(),
+                "a release-acquire store is the strongest order we model (SC)");
+    }
+
+    // ── Address dependencies: AArch64 indexed addressing ─────────────────────────
+
+    /**
+     * {@code [Xbase, Windex, SXTW]} — the AArch64 indexed (extended-register) address
+     * form. Regression for the {@code splitOperands} bug: the operand list was split on
+     * <em>every</em> comma, severing {@code [X5} from {@code W4,SXTW]} so the index
+     * register {@code W4} was dropped before {@link DependencyInfo} ever saw it and the
+     * load recorded <em>no</em> address dependency. The bracketed expression must be one
+     * atomic operand so the index register survives.
+     */
+    @Test
+    void indexedAddressExtractsAddrDependency() {
+        LitmusCase lc = LitmusParser.parse("""
+                AArch64 ADDR-SXTW
+                { 0:X0=x; 0:X1=y; }
+                 P0                  ;
+                 LDR W4,[X0]         ;
+                 LDR W3,[X1,W4,SXTW] ;
+                exists (0:W4=0)
+                """, "addr-sxtw.litmus");
+
+        ReadEvent loadX = readOf(lc.es(), "x");   // LDR W4,[X0] — produces W4
+        ReadEvent loadY = readOf(lc.es(), "y");   // LDR W3,[X1,W4,SXTW] — indexed by W4
+        DependencyInfo deps = lc.deps();
+
+        assertTrue(deps.getAddrDeps(loadY).contains(loadX),
+                "the index register W4 must produce an ADDR dependency from the indexed "
+                        + "load back to the load that defined W4");
+        assertEquals(1, deps.allEdges().stream()
+                        .filter(e -> e.kind() == DependencyInfo.DepKind.ADDR).count(),
+                "exactly one address dependency edge");
+    }
+
+    /**
+     * The plain two-register form {@code [Xbase, Windex]} (no extend) must likewise keep
+     * the index register through operand splitting.
+     */
+    @Test
+    void plainTwoRegisterAddressExtractsAddrDependency() {
+        LitmusCase lc = LitmusParser.parse("""
+                AArch64 ADDR-REG
+                { 0:X0=x; 0:X1=y; }
+                 P0             ;
+                 LDR W4,[X0]    ;
+                 LDR W3,[X1,W4] ;
+                exists (0:W4=0)
+                """, "addr-reg.litmus");
+
+        ReadEvent loadX = readOf(lc.es(), "x");
+        ReadEvent loadY = readOf(lc.es(), "y");
+        assertTrue(lc.deps().getAddrDeps(loadY).contains(loadX),
+                "index register W4 in [X1,W4] must produce an ADDR dependency");
+    }
+
+    /**
+     * {@code [Xbase, #imm]} is a constant displacement, <em>not</em> an index register:
+     * it must not manufacture a spurious address dependency. Only a second register
+     * identifier inside the brackets is an index; an immediate is address-invariant.
+     */
+    @Test
+    void immediateOffsetIsNotAnAddressDependency() {
+        LitmusCase lc = LitmusParser.parse("""
+                AArch64 ADDR-IMM
+                { 0:X0=x; 0:X1=y; }
+                 P0             ;
+                 LDR W4,[X0]    ;
+                 LDR W3,[X1,#0] ;
+                exists (0:W4=0)
+                """, "addr-imm.litmus");
+
+        ReadEvent loadY = readOf(lc.es(), "y");
+        assertTrue(lc.deps().getAddrDeps(loadY).isEmpty(),
+                "a #imm displacement is not an index register — no address dependency");
+        assertEquals(0, lc.deps().allEdges().stream()
+                        .filter(e -> e.kind() == DependencyInfo.DepKind.ADDR).count(),
+                "no address dependency edges at all for an immediate-offset load");
+    }
+
+    /**
+     * The original fixture of {@link #immediateOffsetIsNotAnAddressDependency}, kept verbatim.
+     * It used {@code [X1,#8]} and passed only because the pre-2026-10-09 parser cut every
+     * line at its first {@code #}, so it lexed {@code LDR W3,[X1,} as a plain load of
+     * {@code y}. {@code [X1,#8]} addresses {@code y+8}, which the location model cannot
+     * represent: it must now be rejected explicitly rather than silently read as {@code y}.
+     */
+    @Test
+    void originalNonZeroOffsetFixtureIsRejected() {
+        ParseException ex = assertThrows(ParseException.class, () -> LitmusParser.parse("""
+                AArch64 ADDR-IMM
+                { 0:X0=x; 0:X1=y; }
+                 P0             ;
+                 LDR W4,[X0]    ;
+                 LDR W3,[X1,#8] ;
+                exists (0:W4=0)
+                """, "addr-imm.litmus"));
+        assertEquals(ParseException.Kind.UNSUPPORTED_INSTRUCTION, ex.kind());
+        assertTrue(ex.getMessage().contains("LDR W3,[X1,#8]"), ex.getMessage());
+    }
+
+    /**
+     * A representative, checked-in {@code +addr} litmus file (the herd7 idiom: an
+     * {@code EOR}-self address register feeding an indexed load {@code [Xbase,Windex,SXTW]}).
+     * The address dependency must be recorded, and — because {@code W2 = W0 ^ W0} cancels —
+     * classified fake ({@code isSemantic = false}), confirming the parse fix surfaces the
+     * edge without disturbing the fake/semantic classifier.
+     */
+    @Test
+    void representativeAddrFileRecordsFakeAddrDependency() throws Exception {
+        Path file = Path.of("eval", "examples", "paper", "MP+dmb.sy+addr.litmus");
+        LitmusCase lc = LitmusParser.parse(Files.readString(file), file.getFileName().toString());
+
+        List<DependencyInfo.KindedEdge> addr = lc.deps().allEdges().stream()
+                .filter(e -> e.kind() == DependencyInfo.DepKind.ADDR).toList();
+        assertEquals(1, addr.size(), "the indexed load records exactly one ADDR dependency");
+        assertFalse(addr.get(0).edge().isSemantic(),
+                "the r^r index register carries no real value flow — the ADDR edge is fake");
+    }
+
     // ── Robustness ───────────────────────────────────────────────────────────────
 
     @Test
@@ -237,6 +397,76 @@ class LitmusParserTest {
     private static void assertParsedMatches(String litmus, String corpusName, String what) {
         LitmusCase parsed = LitmusParser.parse(litmus, what);
         assertStructurallyEqual(corpus(corpusName), parsed.es(), what);
+    }
+
+    // ── Regression: precedence-aware idiom folding ──────────────────────────────
+    //
+    // The cancellation folder used to rewrite the expression STRING, so a pattern could
+    // match text that is not a sub-term. `~r0 - r0` contains the substring `r0-r0`, but
+    // parses as `(~r0) - r0 = -2*r0 - 1`, which is NOT constant. Folding it produced `~0`,
+    // the register vanished, and the detector reported a genuinely value-carrying
+    // dependency as fake — dropping an edge from sdep, which is unsound.
+    //
+    // These tests pin both directions: the previously-misclassified witnesses must be
+    // semantic, and the genuine cancellations must still fold.
+
+    /** Every witness reported in findings-attack-impossibility.md §9. */
+    @Test
+    void precedenceSpanningMatchesAreNotFolded() {
+        // value, and why it varies with r0
+        String[][] witnesses = {
+                { "~r0 - r0",           "(~r0) - r0 == -2*r0 - 1" },
+                { "r0 ^ r0 + 1",        "r0 ^ (r0 + 1)" },
+                { "r0 & ~r0 + 1",       "r0 & (~r0 + 1) == r0 & -r0, the lowest set bit" },
+                { "r0 & r0 - r0 + 3",   "r0 & ((r0 - r0) + 3) == r0 & 3" },
+                { "~7 - r0 ^ r0",       "(~7 - r0) ^ r0" },
+                { "~r0 ^ r0 + r0 ^ r0", "(~r0) ^ (r0 + r0) ^ r0" },
+        };
+        for (String[] w : witnesses) {
+            assertEquals(1, semanticEdgeCount(w[0]),
+                    "`" + w[0] + "` must stay SEMANTIC: " + w[1]);
+        }
+    }
+
+    /** The folds that genuinely are sub-terms must still fire — no precision regression. */
+    @Test
+    void genuineCancellationsStillFold() {
+        String[] fake = {
+                "r0 ^ r0",          // whole expression
+                "r0 - r0",
+                "r0 & 0",
+                "r0 * 0",
+                "r0 & ~r0",
+                "r0 ^ r0 ^ 1",      // LBxor: left-assoc, so `r0 ^ r0` IS the left child
+                "r0 + 1 - r0",      // LBfd: reaches the linear-cancellation pass
+        };
+        for (String e : fake) {
+            assertEquals(0, semanticEdgeCount(e),
+                    "`" + e + "` is a genuine cancellation and must fold to fake");
+        }
+    }
+
+    /** Ordinary value-carrying expressions are unaffected. */
+    @Test
+    void genuineDependenciesRemainSemantic() {
+        for (String e : new String[] { "r0", "r0 + 1", "r0 & r0", "r0 ^ 1" }) {
+            assertEquals(1, semanticEdgeCount(e),
+                    "`" + e + "` carries a real value flow");
+        }
+    }
+
+    /**
+     * Semantic data-dependency edges for {@code P0: r0 = READ_ONCE(*x); WRITE_ONCE(*y, value)}.
+     * Note the value must contain no parentheses and no {@code |}: the C dialect truncates a
+     * {@code WRITE_ONCE} value at the first {@code ')'} and treats {@code |} as the
+     * thread-column separator. Both are pre-existing front-end limitations, unrelated to the
+     * folding fix.
+     */
+    private static long semanticEdgeCount(String value) {
+        LitmusCase lc = LitmusParser.parse(
+                "C FOLD\n{ }\n P0 ;\n r0 = READ_ONCE(*x) ;\n WRITE_ONCE(*y, "
+                        + value + ") ;\nexists (0:r0=1)\n", "fold.litmus");
+        return lc.deps().allEdges().stream().filter(e -> e.edge().isSemantic()).count();
     }
 
     private static EventStructure corpus(String name) {

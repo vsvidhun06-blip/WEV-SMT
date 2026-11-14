@@ -1,0 +1,11 @@
+C TC05
+(* JMM causality test case 5 (Pugh 2004). Load-buffering with a real data dependency *)
+(* and a REDUNDANT extra read of x on P0 (r1). Two reads of the same racy location    *)
+(* need not agree, so the data dependency is genuine and the cyclic outcome is thin-  *)
+(* air. JMM DECISION: FORBIDDEN. The literal cross-thread register in the source is    *)
+(* encoded as a thread-local data-dep cycle (P1 reads y, writes x=r+1) preserving the  *)
+(* forbidden data-dependency structure.                                              *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); r1 = READ_ONCE(*x); WRITE_ONCE(*y, r0 + 1); }
+P1(int *x, int *y) { r0 = READ_ONCE(*y); WRITE_ONCE(*x, r0 + 1); }
+exists (0:r0=1 /\ 1:r0=1)

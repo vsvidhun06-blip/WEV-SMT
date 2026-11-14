@@ -1,0 +1,21 @@
+C LB-mem-cancel
+(* Referee counterexample: T+ with the cancellation routed through memory.       *)
+(* P0 stores r0+1 to z, reloads it (po-loc coherence forces the reload to see    *)
+(* its own store: z has no other writer), and stores u0 - r0 = 1 to x.           *)
+{ }
+
+P0(int *x, int *y, int *z) {
+  r0 = READ_ONCE(*y);
+  t0 = r0 + 1;
+  WRITE_ONCE(*z, t0);
+  u0 = READ_ONCE(*z);
+  s0 = u0 - r0;
+  WRITE_ONCE(*x, s0);
+}
+
+P1(int *x, int *y) {
+  r1 = READ_ONCE(*x);
+  WRITE_ONCE(*y, r1);
+}
+
+exists (0:r0=1 /\ 1:r1=1)

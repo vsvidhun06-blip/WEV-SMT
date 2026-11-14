@@ -282,10 +282,14 @@ public final class MinimalWitnessExtractor {
                         bmgr.not(imgr.equal(enc.getPosVar(a), enc.getPosVar(b)))));
             }
         }
-        // po edges between active events, with cross-location W→W / W→R dropped to
-        // mirror EventStructureEncoder.relaxedPoConstraints (Pass 2b-min). The two
+        // po edges between active events, restricted to same-location pairs to mirror
+        // EventStructureEncoder.relaxedPoConstraints (corrected v1, 2026-10-19). The two
         // well-formedness encoders must relax identically or the validation atlas and
-        // the sub-execution search would disagree about what is well-formed.
+        // the sub-execution search would disagree about what is well-formed. In the
+        // submitted build this loop kept cross-location R→W / R→R edges and, unlike the
+        // encoder, edges into and out of fences; both re-imposed cross-location W→W
+        // order through the shared pos order (CORRECTION-NOTICE.md, F-01). Fences have
+        // no location, so sameLocation also excludes them.
         for (Map.Entry<Integer, List<Integer>> entry : es.getProgramOrder().entrySet()) {
             Event a = es.getEventById(entry.getKey());
             if (a == null) continue;
@@ -293,6 +297,7 @@ public final class MinimalWitnessExtractor {
                 Event b = es.getEventById(toId);
                 if (b == null) continue;
                 if (droppedCrossLocation(a, b)) continue;
+                if (!EventStructureEncoder.sameLocation(a, b)) continue;
                 cs.add(bmgr.implication(bothActive(a, b),
                         imgr.lessThan(enc.getPosVar(a), enc.getPosVar(b))));
             }
@@ -364,6 +369,7 @@ public final class MinimalWitnessExtractor {
             case PSO -> axioms.consistencyPSO(active);
             case RA -> axioms.consistencyRA(active);
             case WEAKEST -> axioms.consistencyWEAKEST(active);
+            case RC11 -> axioms.consistencyRC11(active);
         };
     }
 

@@ -1,0 +1,7 @@
+$ java -cp <runtime classpath> wev.smt.cli.LbProbe eval/examples/paper/LB-real.litmus eval/examples/paper/LB-fake-xor-cycle.litmus
+LB-real.litmus
+  A (folding)      WF-only=UNREACHABLE SC=F TSO=F PSO=F RA=F WEAKEST=F RC11=F | edges DATA:semantic DATA:semantic
+  B (exact local)  WF-only=UNREACHABLE SC=F TSO=F PSO=F RA=F WEAKEST=F RC11=F | edges DATA:semantic DATA:semantic
+LB-fake-xor-cycle.litmus
+  A (folding)      WF-only=reachable SC=F TSO=F PSO=F RA=A WEAKEST=A RC11=F | edges DATA:fake DATA:fake
+  B (exact local)  WF-only=reachable SC=F TSO=F PSO=F RA=A WEAKEST=A RC11=F | edges DATA:fake DATA:fake

@@ -9,6 +9,8 @@ import com.weakest.model.ReadEvent;
 import com.weakest.model.RMWEvent;
 import com.weakest.model.WriteEvent;
 import org.junit.jupiter.api.Test;
+import wev.smt.parse.LitmusCase;
+import wev.smt.parse.LitmusParser;
 import org.sosy_lab.common.ShutdownNotifier;
 import org.sosy_lab.common.configuration.Configuration;
 import org.sosy_lab.common.log.BasicLogManager;
@@ -261,8 +263,10 @@ class AxiomaticConsistencyTest {
                 case "SC" -> ax.consistencySC();
                 case "TSO" -> ax.consistencyTSO();
                 case "PSO" -> ax.consistencyPSO();
+                case "PSOCANON" -> ax.consistencyPSOCanonical();
                 case "RA" -> ax.consistencyRA();
                 case "WEAKEST" -> ax.consistencyWEAKEST();
+                case "RC11" -> ax.consistencyRC11();
                 default -> throw new IllegalStateException(model);
             };
             try (ProverEnvironment p = c.newProverEnvironment()) {
@@ -345,6 +349,161 @@ class AxiomaticConsistencyTest {
                 "MP with a relaxed flag-write is allowed under RA");
         assertTrue(unsat(() -> buildMPfence(RLX, ACQ, false, true), "RA"),
                 "a release fence before the flag-write upgrades it to release, forbidding MP under RA");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  Preserved program order across a relaxed hop (TSO / PSO)
+    // ════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * TSO keeps every po pair except W→R, so an ordered pair stays ordered when the
+     * consecutive accesses between its endpoints include a relaxed W→R hop.
+     */
+    @Test
+    void tsoKeepsOrderedPairsAcrossRelaxedHop() throws Exception {
+        // R y ; W z ; R x keeps R y → R x (MP+po+po-po-pos shape).
+        assertTrue(unsat(() -> threads("Wx Wy", "Ry1 Wz Rx0"), "TSO"),
+                "R→R across a dropped W→R hop is preserved under TSO");
+        // W x ; R z ; W y keeps W x → W y.
+        assertTrue(unsat(() -> threads("Wx Rz0 Wy", "Ry1 Rx0"), "TSO"),
+                "W→W across a dropped W→R hop is preserved under TSO");
+        // PSO relaxes W→W, so both stay allowed there (positive controls).
+        assertFalse(unsat(() -> threads("Wx Wy", "Ry1 Wz Rx0"), "PSO"), "PSO relaxes W x → W y");
+        assertFalse(unsat(() -> threads("Wx Rz0 Wy", "Ry1 Rx0"), "PSO"), "PSO relaxes W x → W y");
+    }
+
+    /** TSO still relaxes W→R when other accesses sit between the store and the load. */
+    @Test
+    void tsoStillRelaxesWriteReadAcrossLongerSequences() throws Exception {
+        assertFalse(unsat(() -> threads("Wx Wz Ry0", "Wy Rx0"), "TSO"),
+                "SB with an extra store before the load stays allowed under TSO");
+        assertFalse(unsat(() -> threads("Wx Rz0 Wq Ry0", "Wy Wu Rx0"), "TSO"),
+                "SB with intervening accesses stays allowed under TSO");
+        assertTrue(unsat(() -> threads("Wx Wz Ry0", "Wy Rx0"), "SC"), "SC forbids it");
+    }
+
+    /** A fence orders the pair it separates even when later accesses intervene. */
+    @Test
+    void fenceOrdersPairsAcrossRelaxedHop() throws Exception {
+        assertTrue(unsat(() -> threads("Wx F.FULL Wz Ry0", "Wy F.FULL Rx0"), "TSO"),
+                "a full fence orders W x → R y across the later store to z");
+        assertFalse(unsat(() -> threads("Wx F.ACQ_REL Wz Ry0", "Wy F.ACQ_REL Rx0"), "TSO"),
+                "an acquire-release fence does not order W→R");
+        for (String m : List.of("PSO", "PSOCANON")) {
+            assertTrue(unsat(() -> threads("Wx F.REL Wz Wy", "Ry1 Rx0"), m),
+                    "a release fence orders W x → W y across the later store to z under " + m);
+            assertFalse(unsat(() -> threads("Wx Wz Wy", "Ry1 Rx0"), m), m + " relaxes W→W without the fence");
+        }
+    }
+
+    /** A full-fence RMW orders the accesses on either side of it, not only its neighbours. */
+    @Test
+    void fullFenceRmwOrdersPairsAcrossRelaxedHop() throws Exception {
+        assertTrue(unsat(() -> threads("Wx Uf Wz Ry0", "Wy Uf Rx0"), "TSO"),
+                "the locked RMW orders itself before R y across the later store to z");
+        assertFalse(unsat(() -> threads("Wx Un Wz Ry0", "Wy Un Rx0"), "TSO"),
+                "a non-fencing RMW leaves W→R relaxed");
+    }
+
+    /** The corpus test herd7 x86-TSO forbids: forbidden under SC and TSO only (RC11 has no fr). */
+    @Test
+    void mpPoPoPoPosFromCorpus() throws Exception {
+        String src = String.join("\n",
+                "X86 MP+po+po-po-pos", "{", "}",
+                " P0         | P1          ;",
+                " MOV [x],$1 | MOV EAX,[y] ;",
+                " MOV [y],$1 | MOV [z],$1  ;",
+                "            | MOV EBX,[x] ;",
+                "            | MOV ECX,[x] ;",
+                "exists", "(x=1 /\\ y=1 /\\ z=1 /\\ 1:EAX=1 /\\ 1:EBX=0 /\\ 1:ECX=0)");
+        Map<String, Boolean> expected = Map.of("SC", true, "TSO", true, "PSO", false,
+                "RA", false, "WEAKEST", false, "RC11", false);
+        for (Map.Entry<String, Boolean> e : expected.entrySet()) {
+            assertTrue(e.getValue() == unsatSymbolic(src, e.getKey()),
+                    "MP+po+po-po-pos under " + e.getKey() + " should be " + (e.getValue() ? "UNSAT" : "SAT"));
+        }
+    }
+
+    private static boolean unsatSymbolic(String litmus, String model) throws Exception {
+        Configuration cfg = Configuration.defaultConfiguration();
+        SolverContext c = SolverContextFactory.createSolverContext(
+                cfg, BasicLogManager.create(cfg), ShutdownNotifier.createDummy(), Solvers.Z3);
+        try {
+            Event.resetCounter();
+            LitmusCase lc = LitmusParser.parse(litmus, "MP+po+po-po-pos");
+            EventStructureEncoder enc = new EventStructureEncoder(c, lc.es(), lc.deps());
+            enc.enableSymbolic(lc.writeValueExprs(), lc.existsReadValues(), lc.existsMemFinal());
+            AxiomaticConsistency ax = new AxiomaticConsistency(enc);
+            BooleanFormula cons = switch (model) {
+                case "SC" -> ax.consistencySC();
+                case "TSO" -> ax.consistencyTSO();
+                case "PSO" -> ax.consistencyPSO();
+                case "RA" -> ax.consistencyRA();
+                case "WEAKEST" -> ax.consistencyWEAKEST();
+                case "RC11" -> ax.consistencyRC11();
+                default -> throw new IllegalStateException(model);
+            };
+            try (ProverEnvironment p = c.newProverEnvironment()) {
+                p.addConstraint(enc.getBmgr().and(enc.encodeWellFormedness(), cons));
+                return p.isUnsat();
+            }
+        } finally {
+            c.close();
+        }
+    }
+
+    /**
+     * Threads of space-separated tokens: {@code Wv} stores 1 to {@code v}; {@code Rv0} /
+     * {@code Rv1} loads {@code v} reading the initial 0 / the (single) store of 1;
+     * {@code F.KIND} is a fence; {@code Uf} / {@code Un} is a full-fence / non-fencing RMW
+     * on a location of its own.
+     */
+    private static EventStructure threads(String... threads) {
+        EventStructure es = new EventStructure();
+        Map<String, WriteEvent> init = new LinkedHashMap<>();
+        Map<String, WriteEvent> store = new LinkedHashMap<>();
+        Map<ReadEvent, String> reads = new LinkedHashMap<>();
+        int rmws = 0;
+        for (int t = 0; t < threads.length; t++) {
+            Event prev = null;
+            for (String tok : threads[t].split(" ")) {
+                Event e;
+                if (tok.startsWith("F.")) {
+                    e = new FenceEvent(t + 1, FenceKind.valueOf(tok.substring(2)));
+                } else if (tok.startsWith("U")) {
+                    String loc = "u" + (++rmws);
+                    initOf(es, init, loc);
+                    e = new RMWEvent(t + 1, loc, RLX, 0, 1, tok.equals("Uf"));
+                } else if (tok.startsWith("R")) {
+                    String loc = tok.substring(1, tok.length() - 1);
+                    initOf(es, init, loc);
+                    e = new ReadEvent(t + 1, loc, RLX, "r" + tok);
+                    reads.put((ReadEvent) e, tok);
+                } else {
+                    String loc = tok.substring(1);
+                    initOf(es, init, loc);
+                    e = new WriteEvent(t + 1, loc, RLX, 1, "1");
+                    store.put(loc, (WriteEvent) e);
+                }
+                es.addEvent(e);
+                if (e instanceof WriteEvent w) es.addCoherenceOrder(w.getVariable(), w);
+                if (prev != null) es.addProgramOrder(prev, e);
+                prev = e;
+            }
+        }
+        for (Map.Entry<ReadEvent, String> r : reads.entrySet()) {
+            String loc = r.getKey().getVariable();
+            es.addReadsFrom(r.getKey(), r.getValue().endsWith("1") ? store.get(loc) : init.get(loc));
+        }
+        return es;
+    }
+
+    private static void initOf(EventStructure es, Map<String, WriteEvent> init, String loc) {
+        if (init.containsKey(loc)) return;
+        WriteEvent iw = new WriteEvent(0, loc, RLX, 0, "0");
+        init.put(loc, iw);
+        es.addEvent(iw);
+        es.addCoherenceOrder(loc, iw);
     }
 
     // ── Day-12 builders ───────────────────────────────────────────────────────────

@@ -1,0 +1,16 @@
+C U-mask-chain
+{ }
+
+P0(int *x, int *y) {
+  r0 = READ_ONCE(*y);
+  t = r0 & 1;
+  s = t & 2;
+  WRITE_ONCE(*x, s);
+}
+
+P1(int *x, int *y) {
+  r9 = READ_ONCE(*x);
+  WRITE_ONCE(*y, r9);
+}
+
+exists (0:r0=1 /\ 1:r9=1)

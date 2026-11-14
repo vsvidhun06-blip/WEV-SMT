@@ -1,0 +1,24 @@
+C LB+ctrldata+ctrl-double
+(* Batty et al. (POPL 2013 / ESOP 2015) §4 control-dependency example, "double" *)
+(* variant: BOTH branches of the conditional write the same value, so the write    *)
+(* HAPPENS regardless of the read and its value (42) does not vary with the read.   *)
+(* A precise (semantic) dependency analysis would therefore EXCLUDE this ctrl edge  *)
+(* from sdep_true and ALLOW the LB cycle. The intended C source is:                 *)
+(*                                                                                  *)
+(*   P0: r0 = READ_ONCE(*x); if (r0 == 42) WRITE_ONCE(*y,42) else WRITE_ONCE(*y,42) *)
+(*   P1: r1 = READ_ONCE(*y); if (r1 == 42) WRITE_ONCE(*x,42) else WRITE_ONCE(*x,42) *)
+(*                                                                                  *)
+(* The wev-smt C parser splits a thread body on ';' and has no brace/else handling, *)
+(* so the both-branches-write shape is encoded as a branch on the read followed by  *)
+(* an (always-taken) constant store — the same event structure a both-branches      *)
+(* analysis collapses to. The parser records the ctrl edge read->store with         *)
+(* isSemantic=true UNCONDITIONALLY (LitmusParser line ~593: dep_ctrl ⊆ sdep_impl),  *)
+(* i.e. it cannot tell that both branches write 42. Under the CURRENT detector this  *)
+(* conservative ctrl edge is in sdep, so jfCoherence forbids the LB cycle:           *)
+(* EXPECTED current verdict = FORBIDDEN. This is the §7 load-bearing case — if it    *)
+(* comes back ALLOWED the conservative-inclusion claim (and the contribution claim)  *)
+(* is wrong. The 'none' ablation, which strips ctrl from sdep, should ALLOW it.      *)
+{ }
+P0(int *x, int *y) { r0 = READ_ONCE(*x); if (r0 == 42) ; WRITE_ONCE(*y, 42); }
+P1(int *x, int *y) { r1 = READ_ONCE(*y); if (r1 == 42) ; WRITE_ONCE(*x, 42); }
+exists (0:r0=42 /\ 1:r1=42)
